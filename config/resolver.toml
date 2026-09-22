@@ -1,0 +1,28 @@
+# Iterative DNS Resolver Runtime Configuration Template
+
+[server]
+listen_address = "127.0.0.1"
+listen_port = 5353
+protocol = "UDP"
+
+[transport]
+udp_timeout_seconds = 2.0
+max_retries = 3
+enable_tcp_fallback = true
+buffer_size_bytes = 512
+
+[resolver]
+max_referral_depth = 10
+max_cname_depth = 10
+resolution_deadline_seconds = 10.0
+root_hints_file = "config/root_hints.json"
+
+[cache]
+enabled = true
+max_entries = 10000
+negative_ttl_seconds = 300
+rfc2308_enabled = true
+
+[observability]
+log_level = "INFO"
+enable_query_trace = true

@@ -1,0 +1,3 @@
+"""
+Contract interface unit tests.
+"""
