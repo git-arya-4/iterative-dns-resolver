@@ -12,14 +12,14 @@ def validate():
     python_ver = sys.version_info
     print(f"  Python version: {python_ver.major}.{python_ver.minor}.{python_ver.micro}")
     if python_ver < (3, 10):
-        print("  ❌ ERROR: Python 3.10 or higher is required.")
+        print("  ERROR: Python 3.10 or higher is required.")
         return 1
 
     root_hints = Path("config/root_hints.json")
     if root_hints.is_file():
-        print("  ✓ Config root_hints.json found.")
+        print("  OK: Config root_hints.json found.")
     else:
-        print("  ❌ ERROR: config/root_hints.json missing.")
+        print("  ERROR: config/root_hints.json missing.")
         return 1
 
     try:
@@ -28,9 +28,9 @@ def validate():
         import idns.errors
         import idns.cli
         import idns.core
-        print("  ✓ Single package 'idns' imported successfully.")
+        print("  OK: Single package 'idns' imported successfully.")
     except ImportError as e:
-        print(f"  ❌ ERROR importing idns package: {e}")
+        print(f"  ERROR importing idns package: {e}")
         return 1
 
     print("[IDNS VALIDATOR] Environment validation PASSED cleanly.")

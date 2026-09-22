@@ -4,7 +4,7 @@ Contracts package defining stable protocol interfaces and data abstractions acro
 Exported Contracts & Types:
 - Codec: DNSCodecProtocol
 - Transport: DNSTransportProtocol, ServerAddress, TransportConfig, TransportResult
-- Cache: DNSCacheProtocol, CacheKey, CacheEntry, CacheStats, CacheConfig, compute_rfc2308_ttl
+- Cache: DNSCacheProtocol, CacheKey, CacheEntry, CacheStats
 - Resolver: DNSResolverProtocol, ResolutionContext, ResolverResult
 """
 

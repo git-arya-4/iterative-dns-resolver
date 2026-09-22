@@ -19,8 +19,6 @@ def test_import_contracts():
         CacheKey,
         CacheEntry,
         CacheStats,
-        CacheConfig,
-        compute_rfc2308_ttl,
         DNSResolverProtocol,
         ResolutionContext,
         ResolverResult,
@@ -28,8 +26,6 @@ def test_import_contracts():
     assert DNSCodecProtocol is not None
     assert DNSTransportProtocol is not None
     assert DNSCacheProtocol is not None
-    assert CacheConfig is not None
-    assert compute_rfc2308_ttl is not None
     assert DNSResolverProtocol is not None
 
 
