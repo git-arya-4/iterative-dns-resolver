@@ -1,116 +1,75 @@
-"""
-DNS Cache Subsystem Contract.
-
-Owner: Shared Contract (Implemented by Swastik in src/idns/cache)
-Phase: Phase 0 (Contract) / Phase 5 (Implementation)
-
-Defines cache abstractions supporting positive entry storage, TTL-based eviction,
-and RFC 2308 negative caching (NXDOMAIN / NODATA).
-"""
-
+"""Stable cache API contract for Task 1.6."""
 from dataclasses import dataclass, field
+import time
 from typing import Any, Optional, Protocol, runtime_checkable
-
 
 @dataclass(frozen=True)
 class CacheKey:
-    """Unique key for cache record lookups."""
     domain_name: str
     record_type: str = "A"
     dns_class: str = "IN"
-
     def canonical(self) -> "CacheKey":
-        """Return canonicalized key (lowercased domain name)."""
-        return CacheKey(
-            domain_name=self.domain_name.strip().lower().rstrip("."),
-            record_type=self.record_type.upper(),
-            dns_class=self.dns_class.upper(),
-        )
+        return CacheKey(self.domain_name.strip().lower().rstrip("."), self.record_type.strip().upper(), self.dns_class.strip().upper())
+    @classmethod
+    def from_query(cls, domain: str, record_type: str = "A", dns_class: str = "IN") -> "CacheKey":
+        return cls(domain, record_type, dns_class).canonical()
 
+@dataclass
+class CacheConfig:
+    enabled: bool = True
+    max_entries: int = 10000
+    negative_ttl_seconds: int = 300
+    rfc2308_enabled: bool = True
 
 @dataclass
 class CacheEntry:
-    """
-    Represents a cached DNS response entry.
-    
-    Supports both positive caching (list of resource records) and
-    RFC 2308 negative caching (is_negative=True, nxdomain/nodata flag).
-    """
     key: CacheKey
     records: list[Any] = field(default_factory=list)
     ttl_seconds: int = 300
-    creation_timestamp: float = 0.0
+    creation_timestamp: float = field(default_factory=time.time)
     is_negative: bool = False
-    is_nxdomain: bool = False  # True for NXDOMAIN, False for NODATA if is_negative=True
+    is_nxdomain: bool = False
     soa_record: Optional[Any] = None
+    def is_expired(self, current_timestamp: Optional[float] = None) -> bool:
+        now = time.time() if current_timestamp is None else current_timestamp
+        return now - self.creation_timestamp >= self.ttl_seconds
+    def remaining_ttl(self, current_timestamp: Optional[float] = None) -> int:
+        now = time.time() if current_timestamp is None else current_timestamp
+        return max(0, self.ttl_seconds - int(now - self.creation_timestamp))
+    @classmethod
+    def create_positive(cls, key: CacheKey, records: list[Any], ttl_seconds: int, creation_timestamp: Optional[float] = None) -> "CacheEntry":
+        return cls(key.canonical(), records, max(0, ttl_seconds), time.time() if creation_timestamp is None else creation_timestamp)
+    @classmethod
+    def create_negative(cls, key: CacheKey, is_nxdomain: bool, ttl_seconds: int, soa_record: Optional[Any] = None, creation_timestamp: Optional[float] = None) -> "CacheEntry":
+        return cls(key.canonical(), [], max(0, ttl_seconds), time.time() if creation_timestamp is None else creation_timestamp, True, is_nxdomain, soa_record)
 
-    def is_expired(self, current_timestamp: float) -> bool:
-        """Check if entry TTL has expired relative to creation timestamp."""
-        return (current_timestamp - self.creation_timestamp) >= self.ttl_seconds
-
-    def remaining_ttl(self, current_timestamp: float) -> int:
-        """Calculate remaining TTL in seconds."""
-        remaining = self.ttl_seconds - int(current_timestamp - self.creation_timestamp)
-        return max(0, remaining)
-
+def compute_rfc2308_ttl(soa_record: Optional[Any], max_negative_ttl: int = 300) -> int:
+    """Compute negative TTL as min(SOA TTL, SOA MINIMUM), capped by policy."""
+    limit = max(0, max_negative_ttl)
+    if soa_record is None:
+        return limit
+    values = [limit]
+    for attribute in ("ttl", "minimum"):
+        value = getattr(soa_record, attribute, None)
+        if isinstance(value, (int, float)):
+            values.append(int(value))
+    return max(0, min(values))
 
 @dataclass
 class CacheStats:
-    """Metrics container for cache performance analysis."""
     hits: int = 0
     misses: int = 0
     evictions: int = 0
     size: int = 0
-
     @property
     def hit_ratio(self) -> float:
         total = self.hits + self.misses
-        return (self.hits / total) if total > 0 else 0.0
-
+        return self.hits / total if total else 0.0
 
 @runtime_checkable
 class DNSCacheProtocol(Protocol):
-    """
-    Protocol defining the contract for DNS caching engine.
-    
-    Swastik's cache module (`src/idns/cache`) must satisfy this protocol.
-    """
-
-    def get(self, key: CacheKey) -> Optional[CacheEntry]:
-        """
-        Retrieve a valid unexpired positive or negative cache entry.
-        
-        Args:
-            key: Target domain, record type, and class.
-            
-        Returns:
-            CacheEntry if hit and unexpired, None on miss or expired entry.
-        """
-        ...
-
-    def put(self, key: CacheKey, entry: CacheEntry) -> None:
-        """
-        Store a positive or negative cache entry with TTL.
-        
-        Args:
-            key: Target lookup key.
-            entry: Entry containing records or negative RFC 2308 indicators.
-        """
-        ...
-
-    def remove(self, key: CacheKey) -> bool:
-        """
-        Manually evict a key from the cache.
-        
-        Returns:
-            bool: True if entry existed and was removed, False otherwise.
-        """
-        ...
-
-    def clear(self) -> None:
-        """Purge all entries from the cache."""
-        ...
-
-    def get_stats(self) -> CacheStats:
-        """Return cache hit/miss and eviction metrics."""
-        ...
+    def get(self, key: CacheKey) -> Optional[CacheEntry]: ...
+    def put(self, key: CacheKey, entry: CacheEntry) -> None: ...
+    def remove(self, key: CacheKey) -> bool: ...
+    def clear(self) -> None: ...
+    def get_stats(self) -> CacheStats: ...

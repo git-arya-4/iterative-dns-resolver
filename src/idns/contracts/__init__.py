@@ -20,6 +20,8 @@ from idns.contracts.cache import (
     CacheKey,
     CacheEntry,
     CacheStats,
+    CacheConfig,
+    compute_rfc2308_ttl,
 )
 from idns.contracts.resolver import (
     DNSResolverProtocol,
@@ -37,6 +39,8 @@ __all__ = [
     "CacheKey",
     "CacheEntry",
     "CacheStats",
+    "CacheConfig",
+    "compute_rfc2308_ttl",
     "DNSResolverProtocol",
     "ResolutionContext",
     "ResolverResult",
