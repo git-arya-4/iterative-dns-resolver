@@ -31,7 +31,11 @@ class UDPTransport(DNSTransportProtocol):
 
         last_error: Exception | None = None
 
-        for _ in range(config.max_retries):
+        # max_retries means retries after the initial attempt.
+        # Therefore, total attempts = 1 initial attempt + max_retries.
+        total_attempts = 1 + config.max_retries
+
+        for _ in range(total_attempts):
             start_time = time.perf_counter()
 
             try:
@@ -46,9 +50,21 @@ class UDPTransport(DNSTransportProtocol):
                         (server.ip, server.port),
                     )
 
-                    raw_response, _ = sock.recvfrom(
+                    raw_response, source_address = sock.recvfrom(
                         config.buffer_size
                     )
+
+                    source_ip, source_port = source_address
+
+                    if (
+                        source_ip != server.ip
+                        or source_port != server.port
+                    ):
+                        raise ServerUnreachableError(
+                            f"DNS response received from unexpected server "
+                            f"'{source_ip}:{source_port}', expected "
+                            f"'{server.ip}:{server.port}'."
+                        )
 
                 rtt_ms = (time.perf_counter() - start_time) * 1000
 

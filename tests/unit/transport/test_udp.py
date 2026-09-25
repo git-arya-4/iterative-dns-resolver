@@ -8,12 +8,15 @@ from idns.transport.udp import UDPTransport
 
 
 QUERY = b"dns-query"
-SERVER = ServerAddress("8.8.8.8")
+SERVER = ServerAddress("192.0.2.1")
 
 
 def test_send_query_returns_response():
     fake_socket = MagicMock()
-    fake_socket.recvfrom.return_value = (b"dns-response", ("8.8.8.8", 53))
+    fake_socket.recvfrom.return_value = (
+        b"dns-response",
+        ("192.0.2.1", 53),
+    )
 
     with patch("idns.transport.udp.socket.socket") as socket_mock:
         socket_mock.return_value.__enter__.return_value = fake_socket
@@ -27,7 +30,7 @@ def test_send_query_returns_response():
     fake_socket.settimeout.assert_called_once_with(2.0)
     fake_socket.sendto.assert_called_once_with(
         QUERY,
-        ("8.8.8.8", 53),
+        ("192.0.2.1", 53),
     )
 
 
@@ -46,7 +49,43 @@ def test_send_query_retries_after_timeout():
         with pytest.raises(DNSTimeoutError):
             UDPTransport().send_query(SERVER, QUERY, config)
 
-    assert socket_mock.call_count == 3
+    # 1 initial attempt + 3 retries = 4 total attempts.
+    assert socket_mock.call_count == 4
+
+
+def test_send_query_max_retries_zero_makes_one_attempt():
+    fake_socket = MagicMock()
+    fake_socket.recvfrom.side_effect = TimeoutError
+
+    with patch("idns.transport.udp.socket.socket") as socket_mock:
+        socket_mock.return_value.__enter__.return_value = fake_socket
+
+        config = TransportConfig(
+            timeout_seconds=0.1,
+            max_retries=0,
+        )
+
+        with pytest.raises(DNSTimeoutError):
+            UDPTransport().send_query(SERVER, QUERY, config)
+
+    assert socket_mock.call_count == 1
+
+
+def test_send_query_rejects_unexpected_response_source():
+    fake_socket = MagicMock()
+    fake_socket.recvfrom.return_value = (
+        b"dns-response",
+        ("192.0.2.2", 53),
+    )
+
+    with patch("idns.transport.udp.socket.socket") as socket_mock:
+        socket_mock.return_value.__enter__.return_value = fake_socket
+
+        with pytest.raises(
+            ServerUnreachableError,
+            match="unexpected server",
+        ):
+            UDPTransport().send_query(SERVER, QUERY)
 
 
 def test_send_query_raises_unreachable_error():
