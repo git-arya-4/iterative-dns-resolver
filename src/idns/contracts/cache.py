@@ -5,13 +5,13 @@ from typing import Any, Optional, Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class CacheKey:
-    domain_name: Any
+    domain_name: str
     record_type: str = "A"
     dns_class: str = "IN"
     def canonical(self) -> "CacheKey":
-        return CacheKey(str(self.domain_name).strip().lower().rstrip("."), self.record_type.strip().upper(), self.dns_class.strip().upper())
+        return CacheKey(self.domain_name.strip().lower().rstrip("."), self.record_type.strip().upper(), self.dns_class.strip().upper())
     @classmethod
-    def from_query(cls, domain: Any, record_type: str = "A", dns_class: str = "IN") -> "CacheKey":
+    def from_query(cls, domain: str, record_type: str = "A", dns_class: str = "IN") -> "CacheKey":
         return cls(domain, record_type, dns_class).canonical()
 
 @dataclass
