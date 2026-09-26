@@ -3,10 +3,14 @@ Unit test verifying CoreResolverScaffold initialization and root hints loading i
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock
+
 import pytest
 
+from idns.cache import InMemoryDNSCache
+from idns.contracts.resolver import ResolutionContext
 from idns.core import CoreResolverScaffold
-from idns.errors import ConfigError
+from idns.errors import CNAMELoopError, ConfigError, MaxDepthExceededError
 
 
 def test_core_resolver_scaffold_root_hints():
@@ -41,3 +45,75 @@ def test_core_resolver_resolve_raises_not_implemented():
     with pytest.raises(NotImplementedError) as exc_info:
         scaffold.resolve("example.com", "A")
     assert "Phase 5" in str(exc_info.value)
+
+
+def test_core_resolver_preserves_injected_dependencies():
+    codec = MagicMock()
+    transport = MagicMock()
+    cache = InMemoryDNSCache()
+
+    scaffold = CoreResolverScaffold(
+        codec=codec,
+        transport=transport,
+        cache=cache,
+    )
+
+    assert scaffold.codec is codec
+    assert scaffold.transport is transport
+    assert scaffold.cache is cache
+
+
+def test_core_resolver_accepts_or_constructs_context():
+    scaffold = CoreResolverScaffold()
+    supplied_context = ResolutionContext(max_depth=3)
+
+    assert scaffold.create_context(supplied_context) is supplied_context
+    created_context = scaffold.create_context()
+    assert isinstance(created_context, ResolutionContext)
+    assert created_context.max_depth == 10
+
+
+def test_resolution_context_depth_behavior_is_preserved():
+    context = ResolutionContext(max_depth=1)
+    context.increment_depth()
+    assert context.current_depth == 1
+
+    with pytest.raises(MaxDepthExceededError):
+        context.increment_depth()
+
+
+def test_resolution_context_cname_loop_behavior_is_preserved():
+    context = ResolutionContext()
+    context.record_cname("Example.COM.")
+    assert context.cname_chain == ["example.com."]
+
+    with pytest.raises(CNAMELoopError):
+        context.record_cname("EXAMPLE.COM.")
+
+
+def test_resolver_construction_does_not_use_network_or_cache():
+    transport = MagicMock()
+    cache = MagicMock()
+
+    CoreResolverScaffold(transport=transport, cache=cache)
+
+    transport.assert_not_called()
+    cache.assert_not_called()
+
+
+def test_resolver_skeleton_does_not_invoke_dependencies_or_forward():
+    codec = MagicMock()
+    transport = MagicMock()
+    cache = MagicMock()
+    scaffold = CoreResolverScaffold(
+        codec=codec,
+        transport=transport,
+        cache=cache,
+    )
+
+    with pytest.raises(NotImplementedError):
+        scaffold.resolve("example.com", "A")
+
+    codec.assert_not_called()
+    transport.assert_not_called()
+    cache.assert_not_called()
