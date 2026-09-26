@@ -9,14 +9,26 @@ Responsibilities:
 - Handlers for RDATA codecs across required record types
 - Implementation of DNSCodecProtocol contract
 """
+
 from .cursor import (
     ByteCursor,
     DNSCursorError,
     DNSBoundsError,
 )
 
+from .name_codec import (
+    DNSNameCodec,
+    DNSNameCodecError,
+    DNSNameEncodeError,
+    DNSNameDecodeError,
+)
+
 __all__ = [
     "ByteCursor",
     "DNSCursorError",
     "DNSBoundsError",
+    "DNSNameCodec",
+    "DNSNameCodecError",
+    "DNSNameEncodeError",
+    "DNSNameDecodeError",
 ]
