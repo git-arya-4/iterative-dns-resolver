@@ -13,9 +13,16 @@ Responsibilities:
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
-from idns.contracts.resolver import DNSResolverProtocol, ResolutionContext
+from idns.contracts.cache import DNSCacheProtocol
+from idns.contracts.codec import DNSCodecProtocol
+from idns.contracts.resolver import (
+    DNSResolverProtocol,
+    ResolutionContext,
+    ResolverResult,
+)
+from idns.contracts.transport import DNSTransportProtocol
 from idns.errors import ConfigError
 
 
@@ -30,9 +37,9 @@ class CoreResolverScaffold(DNSResolverProtocol):
     def __init__(
         self,
         root_hints_path: Optional[str | Path] = None,
-        codec: Optional[Any] = None,
-        transport: Optional[Any] = None,
-        cache: Optional[Any] = None,
+        codec: Optional[DNSCodecProtocol] = None,
+        transport: Optional[DNSTransportProtocol] = None,
+        cache: Optional[DNSCacheProtocol] = None,
     ):
         self.codec = codec
         self.transport = transport
@@ -41,6 +48,18 @@ class CoreResolverScaffold(DNSResolverProtocol):
         
         if root_hints_path:
             self.load_root_hints(root_hints_path)
+
+    def create_context(
+        self,
+        context: Optional[ResolutionContext] = None,
+    ) -> ResolutionContext:
+        """Return the supplied context or create a fresh resolution context.
+
+        This establishes the context boundary for the resolver skeleton without
+        starting resolution or invoking any injected dependency.
+        """
+
+        return context if context is not None else ResolutionContext()
 
     def load_root_hints(self, path: str | Path) -> list[dict[str, str]]:
         """Load and validate root hints configuration from JSON file."""
@@ -63,7 +82,7 @@ class CoreResolverScaffold(DNSResolverProtocol):
         domain_name: str,
         record_type: str = "A",
         context: Optional[ResolutionContext] = None,
-    ) -> Any:
+    ) -> ResolverResult:
         """
         Scaffold entry point for domain resolution.
         Actual iterative resolution algorithm will be implemented in Phase 5.
