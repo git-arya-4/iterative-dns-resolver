@@ -296,7 +296,7 @@ class DNSMessageDecoder:
 
         rdata_start = cursor.position
 
-        if cursor.remaining < rdlength:
+        if cursor.remaining() < rdlength:
             raise DNSMessageDecodeError(
                 "RDATA extends beyond DNS packet"
             )
