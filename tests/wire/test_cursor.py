@@ -87,3 +87,21 @@ def test_exact_end_is_valid():
 def test_invalid_input_type_rejected():
     with pytest.raises(TypeError):
         ByteCursor("not bytes")
+def test_fork_creates_cursor_at_position():
+    cursor = ByteCursor(b"abcdef")
+
+    forked = cursor.fork(3)
+
+    assert forked.position == 3
+    assert forked.read_u8() == ord("d")
+
+    # Original cursor is unchanged.
+    assert cursor.position == 0
+def test_fork_rejects_invalid_position():
+    cursor = ByteCursor(b"abc")
+
+    with pytest.raises(DNSBoundsError):
+        cursor.fork(4)
+
+    with pytest.raises(DNSBoundsError):
+        cursor.fork(-1)

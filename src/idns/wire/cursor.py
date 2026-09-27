@@ -108,3 +108,21 @@ class ByteCursor:
         """Advance the cursor by `size` bytes safely."""
         self.ensure_available(size)
         self._offset += size
+
+    def fork(self, position: int = 0) -> "ByteCursor":
+        """
+        Create a new cursor over the same underlying packet.
+
+        The new cursor starts at `position`.
+        The current cursor is not modified.
+        """
+
+        if position < 0 or position > len(self._data):
+            raise DNSBoundsError(
+                f"invalid cursor position: {position}"
+            )
+
+        cursor = ByteCursor(self._data)
+        cursor._offset = position
+
+        return cursor
