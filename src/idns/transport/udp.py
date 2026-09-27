@@ -123,6 +123,35 @@ class UDPTransport(DNSTransportProtocol):
             timeout=config.timeout_seconds,
         ) from last_error
 
+    def send_query_with_fallback(
+        self,
+        servers: list[ServerAddress],
+        query_bytes: bytes,
+        config: TransportConfig | None = None,
+    ) -> TransportResult:
+        """Try candidate DNS servers using the configured retry policy."""
+
+        if not servers:
+            raise ServerUnreachableError(
+                "No candidate DNS servers were provided."
+            )
+
+        last_error: Exception | None = None
+
+        for server in servers:
+            try:
+                return self.send_query(
+                    server,
+                    query_bytes,
+                    config,
+                )
+            except (DNSTimeoutError, ServerUnreachableError) as exc:
+                last_error = exc
+
+        raise ServerUnreachableError(
+            "All candidate DNS servers failed."
+        ) from last_error
+
     @staticmethod
     def _get_transaction_id(query_bytes: bytes) -> int:
         """Extract the transaction ID from a DNS query."""
