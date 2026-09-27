@@ -474,10 +474,15 @@ class DNSMessageDecoder:
         except DNSMessageDecoderError:
             raise
 
+
         except Exception as exc:
+
             raise DNSMessageDecodeError(
-                f"failed to decode RDATA for type "
-                f"{record_type}"
+
+                f"failed to decode DNS message: "
+
+                f"{type(exc).__name__}: {exc}"
+
             ) from exc
 
         # ----------------------------------------------------
