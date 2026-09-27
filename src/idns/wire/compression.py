@@ -87,9 +87,18 @@ class DNSCompressionDecoder:
                     ) from exc
 
                 pointer = (
-                    ((first & 0x3F) << 8)
-                    | second
+                        ((first & 0x3F) << 8)
+                        | second
                 )
+
+                # Compression pointers must reference an earlier
+                # occurrence in the DNS packet. A pointer to its
+                # own position or to a later position is invalid.
+                if pointer >= current.position:
+                    raise DNSCompressionDecodeError(
+                        f"forward compression pointer is invalid: "
+                        f"{pointer} >= {current.position}"
+                    )
 
                 if pointer >= cursor.length:
                     raise DNSCompressionDecodeError(
@@ -98,8 +107,7 @@ class DNSCompressionDecoder:
 
                 if pointer in visited_offsets:
                     raise DNSCompressionDecodeError(
-                        f"compression pointer loop detected at offset "
-                        f"{pointer}"
+                        f"compression pointer loop detected at offset {pointer}"
                     )
 
                 visited_offsets.add(pointer)
