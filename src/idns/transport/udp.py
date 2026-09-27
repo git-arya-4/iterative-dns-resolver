@@ -12,7 +12,10 @@ from idns.contracts.transport import (
 from idns.errors import (
     DNSTimeoutError,
     ServerUnreachableError,
+    TransportError,
 )
+from idns.wire import DNSHeaderCodec
+from idns.wire.cursor import ByteCursor
 
 
 class UDPTransport(DNSTransportProtocol):
@@ -24,15 +27,15 @@ class UDPTransport(DNSTransportProtocol):
         query_bytes: bytes,
         config: TransportConfig | None = None,
     ) -> TransportResult:
-        """Send a DNS query and return the raw response."""
+        """Send a DNS query and return the matching raw response."""
 
         if config is None:
             config = TransportConfig()
 
+        expected_transaction_id = self._get_transaction_id(query_bytes)
         last_error: Exception | None = None
 
         # max_retries means retries after the initial attempt.
-        # Therefore, total attempts = 1 initial attempt + max_retries.
         total_attempts = 1 + config.max_retries
 
         for _ in range(total_attempts):
@@ -66,12 +69,31 @@ class UDPTransport(DNSTransportProtocol):
                             f"'{server.ip}:{server.port}'."
                         )
 
+                    response_header = DNSHeaderCodec.decode(
+                        ByteCursor(raw_response)
+                    )
+
+                    if (
+                        response_header.transaction_id
+                        != expected_transaction_id
+                    ):
+                        raise TransportError(
+                            "DNS response transaction ID does not match "
+                            "the query transaction ID."
+                        )
+
+                    if response_header.qr != 1:
+                        raise TransportError(
+                            "DNS response does not have the response flag set."
+                        )
+
                 rtt_ms = (time.perf_counter() - start_time) * 1000
 
                 return TransportResult(
                     raw_response=raw_response,
                     server_used=server,
                     rtt_ms=rtt_ms,
+                    tc_bit_set=bool(response_header.tc),
                 )
 
             except socket.timeout as exc:
@@ -87,3 +109,18 @@ class UDPTransport(DNSTransportProtocol):
             server=f"{server.ip}:{server.port}",
             timeout=config.timeout_seconds,
         ) from last_error
+
+    @staticmethod
+    def _get_transaction_id(query_bytes: bytes) -> int:
+        """Extract the transaction ID from a DNS query."""
+
+        try:
+            header = DNSHeaderCodec.decode(
+                ByteCursor(query_bytes)
+            )
+        except Exception as exc:
+            raise TransportError(
+                "Unable to decode DNS query header."
+            ) from exc
+
+        return header.transaction_id
