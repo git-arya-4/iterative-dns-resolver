@@ -104,12 +104,8 @@ class DNSMessageEncoder:
         """
         Encode a complete DNSMessage into wire format.
 
-        Args:
-            message:
-                DNSMessage instance.
-
-        Returns:
-            Raw DNS packet bytes.
+        The DNS header section counts are synchronized with the
+        actual message sections before the header is encoded.
         """
 
         if not isinstance(message, DNSMessage):
@@ -118,22 +114,40 @@ class DNSMessageEncoder:
             )
 
         try:
+            # ----------------------------------------------------
+            # Synchronize header counts with actual sections.
+            #
+            # This ensures:
+            #
+            # QDCOUNT == len(questions)
+            # ANCOUNT == len(answers)
+            # NSCOUNT == len(authorities)
+            # ARCOUNT == len(additionals)
+            # ----------------------------------------------------
+
+            message.update_counts()
+
+            # ----------------------------------------------------
             # Shared compression state for the entire packet.
+            # ----------------------------------------------------
+
             encoder = DNSCompressionEncoder()
 
             packet = bytearray()
 
-            # ------------------------------------------------
-            # 1. HEADER
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # HEADER
+            # ----------------------------------------------------
 
-            header = DNSHeaderCodec.encode(message.header)
+            header = DNSHeaderCodec.encode(
+                message.header
+            )
 
             packet.extend(header)
 
-            # ------------------------------------------------
-            # 2. QUESTIONS
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # QUESTIONS
+            # ----------------------------------------------------
 
             for question in message.questions:
                 encoded_question = cls._encode_question(
@@ -144,9 +158,9 @@ class DNSMessageEncoder:
 
                 packet.extend(encoded_question)
 
-            # ------------------------------------------------
-            # 3. ANSWERS
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # ANSWERS
+            # ----------------------------------------------------
 
             for record in message.answers:
                 encoded_record = cls._encode_record(
@@ -157,9 +171,9 @@ class DNSMessageEncoder:
 
                 packet.extend(encoded_record)
 
-            # ------------------------------------------------
-            # 4. AUTHORITY
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # AUTHORITY
+            # ----------------------------------------------------
 
             for record in message.authorities:
                 encoded_record = cls._encode_record(
@@ -170,9 +184,9 @@ class DNSMessageEncoder:
 
                 packet.extend(encoded_record)
 
-            # ------------------------------------------------
-            # 5. ADDITIONAL
-            # ------------------------------------------------
+            # ----------------------------------------------------
+            # ADDITIONAL
+            # ----------------------------------------------------
 
             for record in message.additionals:
                 encoded_record = cls._encode_record(
@@ -192,11 +206,6 @@ class DNSMessageEncoder:
             raise DNSMessageEncodeError(
                 "failed to encode DNS message"
             ) from exc
-
-    # ========================================================
-    # QUESTION ENCODER
-    # ========================================================
-
     @classmethod
     def _encode_question(
         cls,
@@ -205,46 +214,249 @@ class DNSMessageEncoder:
         current_offset: int,
     ) -> bytes:
         """
-        Encode one DNS question.
+        Encode a DNS question.
 
-        Question format:
+        Wire format:
 
             QNAME
             QTYPE
             QCLASS
         """
 
-        try:
-            # ------------------------------------------------
-            # QNAME
-            # ------------------------------------------------
+        if not isinstance(question, DNSQuestion):
+            raise DNSMessageEncodeError(
+                "question must be a DNSQuestion"
+            )
 
+        try:
+            # Encode QNAME using shared compression state.
             qname = encoder.encode(
                 question.qname,
-                current_offset=current_offset,
+                current_offset,
             )
 
-            # ------------------------------------------------
-            # QTYPE / QCLASS
-            # ------------------------------------------------
-
-            fixed = struct.pack(
-                "!HH",
-                question.qtype_code,
-                question.qclass_code,
+            # QTYPE + QCLASS
+            return (
+                qname
+                + struct.pack(
+                    "!HH",
+                    question.qtype_code,
+                    question.qclass_code,
+                )
             )
-
-            return qname + fixed
 
         except Exception as exc:
             raise DNSMessageEncodeError(
                 "failed to encode DNS question"
             ) from exc
 
-    # ========================================================
-    # RESOURCE RECORD ENCODER
-    # ========================================================
+    @classmethod
+    def _encode_record(
+        cls,
+        record,
+        encoder: DNSCompressionEncoder,
+        current_offset: int,
+    ) -> bytes:
+        """
+        Encode a DNS Resource Record.
 
+        Wire format:
+
+            NAME
+            TYPE
+            CLASS
+            TTL
+            RDLENGTH
+            RDATA
+        """
+
+        try:
+            # --------------------------------------------------------
+            # Record owner NAME
+            # --------------------------------------------------------
+
+            name = encoder.encode(
+                record.name,
+                current_offset,
+            )
+
+            # --------------------------------------------------------
+            # RDATA starts after:
+            #
+            # NAME + TYPE(2) + CLASS(2) + TTL(4) + RDLENGTH(2)
+            # --------------------------------------------------------
+
+            rdata_offset = (
+                current_offset
+                + len(name)
+                + 2
+                + 2
+                + 4
+                + 2
+            )
+
+            # --------------------------------------------------------
+            # A
+            # --------------------------------------------------------
+
+            if isinstance(record, ARecord):
+                rdata = DNSAddressRDataCodec.encode_a(
+                    record.address
+                )
+                record_type = 1
+
+            # --------------------------------------------------------
+            # AAAA
+            # --------------------------------------------------------
+
+            elif isinstance(record, AAAARecord):
+                rdata = DNSAddressRDataCodec.encode_aaaa(
+                    record.address
+                )
+                record_type = 28
+
+            # --------------------------------------------------------
+            # NS
+            # --------------------------------------------------------
+
+            elif isinstance(record, NSRecord):
+                rdata = DNSNSRDataCodec.encode(
+                    record.nameserver,
+                    encoder,
+                    rdata_offset,
+                )
+                record_type = 2
+
+            # --------------------------------------------------------
+            # CNAME
+            # --------------------------------------------------------
+
+            elif isinstance(record, CNAMERecord):
+                rdata = DNSCNameRDataCodec.encode(
+                    record.canonical_name,
+                    encoder,
+                    rdata_offset,
+                )
+                record_type = 5
+
+            # --------------------------------------------------------
+            # MX
+            # --------------------------------------------------------
+
+            elif isinstance(record, MXRecord):
+                rdata = DNSMXRDataCodec.encode(
+                    record.preference,
+                    record.exchange,
+                    encoder,
+                    rdata_offset,
+                )
+                record_type = 15
+
+            # --------------------------------------------------------
+            # TXT
+            # --------------------------------------------------------
+
+            elif isinstance(record, TXTRecord):
+                rdata = DNSTXTRDataCodec.encode(
+                    record.text
+                )
+                record_type = 16
+
+            # --------------------------------------------------------
+            # SOA
+            # --------------------------------------------------------
+
+            elif isinstance(record, SOARecord):
+                rdata = DNSSOARDataCodec.encode(
+                    record.mname,
+                    record.rname,
+                    record.serial,
+                    record.refresh,
+                    record.retry,
+                    record.expire,
+                    record.minimum,
+                    encoder,
+                    rdata_offset,
+                )
+                record_type = 6
+
+            else:
+                raise DNSMessageEncodeError(
+                    f"unsupported record type: "
+                    f"{type(record).__name__}"
+                )
+
+            return cls._build_record(
+                name=name,
+                record_type=record_type,
+                record_class=1,
+                ttl=record.ttl,
+                rdata=rdata,
+            )
+
+        except DNSMessageEncodeError:
+            raise
+
+        except Exception as exc:
+            raise DNSMessageEncodeError(
+                f"failed to encode record "
+                f"{type(record).__name__}"
+            ) from exc
+
+    @classmethod
+    def _build_record(
+        cls,
+        name: bytes,
+        record_type: int,
+        record_class: int,
+        ttl: int,
+        rdata: bytes,
+    ) -> bytes:
+        """
+        Build the complete DNS Resource Record.
+        """
+
+        if not isinstance(name, bytes):
+            raise DNSMessageEncodeError(
+                "record name must be bytes"
+            )
+
+        if not isinstance(rdata, bytes):
+            raise DNSMessageEncodeError(
+                "RDATA must be bytes"
+            )
+
+        if not 0 <= record_type <= 0xFFFF:
+            raise DNSMessageEncodeError(
+                f"invalid record type: {record_type}"
+            )
+
+        if not 0 <= record_class <= 0xFFFF:
+            raise DNSMessageEncodeError(
+                f"invalid record class: {record_class}"
+            )
+
+        if not 0 <= ttl <= 0xFFFFFFFF:
+            raise DNSMessageEncodeError(
+                f"invalid TTL: {ttl}"
+            )
+
+        if len(rdata) > 0xFFFF:
+            raise DNSMessageEncodeError(
+                "RDATA is too large"
+            )
+
+        return (
+            name
+            + struct.pack(
+                "!HHIH",
+                record_type,
+                record_class,
+                ttl,
+                len(rdata),
+            )
+            + rdata
+        )
     @classmethod
     def _encode_record(
         cls,
