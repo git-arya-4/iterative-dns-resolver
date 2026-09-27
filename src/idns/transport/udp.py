@@ -14,8 +14,6 @@ from idns.errors import (
     ServerUnreachableError,
     TransportError,
 )
-from idns.wire import DNSHeaderCodec
-from idns.wire.cursor import ByteCursor
 
 
 class UDPTransport(DNSTransportProtocol):
@@ -53,39 +51,54 @@ class UDPTransport(DNSTransportProtocol):
                         (server.ip, server.port),
                     )
 
-                    raw_response, source_address = sock.recvfrom(
-                        config.buffer_size
-                    )
-
-                    source_ip, source_port = source_address
-
-                    if (
-                        source_ip != server.ip
-                        or source_port != server.port
-                    ):
-                        raise ServerUnreachableError(
-                            f"DNS response received from unexpected server "
-                            f"'{source_ip}:{source_port}', expected "
-                            f"'{server.ip}:{server.port}'."
+                    # Keep receiving until the response matches this query.
+                    # An unrelated UDP packet must not terminate the query.
+                    while True:
+                        raw_response, source_address = sock.recvfrom(
+                            config.buffer_size
                         )
 
-                    response_header = DNSHeaderCodec.decode(
-                        ByteCursor(raw_response)
-                    )
+                        source_ip, source_port = source_address
 
-                    if (
-                        response_header.transaction_id
-                        != expected_transaction_id
-                    ):
-                        raise TransportError(
-                            "DNS response transaction ID does not match "
-                            "the query transaction ID."
+                        if (
+                            source_ip != server.ip
+                            or source_port != server.port
+                        ):
+                            raise ServerUnreachableError(
+                                f"DNS response received from unexpected "
+                                f"server '{source_ip}:{source_port}', "
+                                f"expected '{server.ip}:{server.port}'."
+                            )
+
+                        if len(raw_response) < 4:
+                            raise TransportError(
+                                "DNS response is too short to contain "
+                                "a DNS header."
+                            )
+
+                        response_transaction_id = int.from_bytes(
+                            raw_response[0:2],
+                            "big",
                         )
 
-                    if response_header.qr != 1:
-                        raise TransportError(
-                            "DNS response does not have the response flag set."
+                        if response_transaction_id != expected_transaction_id:
+                            continue
+
+                        flags = int.from_bytes(
+                            raw_response[2:4],
+                            "big",
                         )
+
+                        qr = bool(flags & 0x8000)
+
+                        if not qr:
+                            raise TransportError(
+                                "DNS response does not have the response "
+                                "flag set."
+                            )
+
+                        tc_bit_set = bool(flags & 0x0200)
+                        break
 
                 rtt_ms = (time.perf_counter() - start_time) * 1000
 
@@ -93,7 +106,7 @@ class UDPTransport(DNSTransportProtocol):
                     raw_response=raw_response,
                     server_used=server,
                     rtt_ms=rtt_ms,
-                    tc_bit_set=bool(response_header.tc),
+                    tc_bit_set=tc_bit_set,
                 )
 
             except socket.timeout as exc:
@@ -114,13 +127,9 @@ class UDPTransport(DNSTransportProtocol):
     def _get_transaction_id(query_bytes: bytes) -> int:
         """Extract the transaction ID from a DNS query."""
 
-        try:
-            header = DNSHeaderCodec.decode(
-                ByteCursor(query_bytes)
-            )
-        except Exception as exc:
+        if len(query_bytes) < 2:
             raise TransportError(
-                "Unable to decode DNS query header."
-            ) from exc
+                "DNS query is too short to contain a transaction ID."
+            )
 
-        return header.transaction_id
+        return int.from_bytes(query_bytes[0:2], "big")

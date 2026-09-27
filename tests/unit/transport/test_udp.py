@@ -56,21 +56,30 @@ def test_send_query_returns_matching_response():
     )
 
 
-def test_send_query_rejects_mismatched_transaction_id():
+def test_send_query_ignores_mismatched_transaction_id():
     fake_socket = MagicMock()
-    fake_socket.recvfrom.return_value = (
-        make_response(transaction_id=0x5678),
-        ("192.0.2.1", 53),
-    )
+    fake_socket.recvfrom.side_effect = [
+        (
+            make_response(transaction_id=0x5678),
+            ("192.0.2.1", 53),
+        ),
+        (
+            make_response(),
+            ("192.0.2.1", 53),
+        ),
+    ]
 
     with patch("idns.transport.udp.socket.socket") as socket_mock:
         socket_mock.return_value.__enter__.return_value = fake_socket
 
-        with pytest.raises(
-            TransportError,
-            match="transaction ID does not match",
-        ):
-            UDPTransport().send_query(SERVER, QUERY)
+        result = UDPTransport().send_query(SERVER, QUERY)
+
+    assert result.raw_response == make_response()
+    assert result.server_used == SERVER
+    assert result.rtt_ms >= 0
+    assert result.tc_bit_set is False
+
+    assert fake_socket.recvfrom.call_count == 2
 
 
 def test_send_query_rejects_non_response_packet():
