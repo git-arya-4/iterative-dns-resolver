@@ -152,6 +152,20 @@ def test_send_query_rejects_short_response():
             UDPTransport().send_query(SERVER, QUERY)
 
 
+def test_send_query_rejects_truncated_dns_header():
+    fake_socket = MagicMock()
+    fake_socket.recvfrom.return_value = (
+        b"\x12\x34\x80\x00",
+        ("192.0.2.1", 53),
+    )
+
+    with patch("idns.transport.udp.socket.socket") as socket_mock:
+        socket_mock.return_value.__enter__.return_value = fake_socket
+
+        with pytest.raises(TransportError):
+            UDPTransport().send_query(SERVER, QUERY)
+
+
 def test_send_query_retries_after_timeout():
     fake_socket = MagicMock()
     fake_socket.recvfrom.side_effect = [

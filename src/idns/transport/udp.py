@@ -70,7 +70,7 @@ class UDPTransport(DNSTransportProtocol):
                                 f"expected '{server.ip}:{server.port}'."
                             )
 
-                        if len(raw_response) < 4:
+                        if len(raw_response) < 12:
                             raise TransportError(
                                 "DNS response is too short to contain "
                                 "a DNS header."
