@@ -3,7 +3,6 @@ Unit test verifying that contract protocols in idns.contracts can be satisfied b
 """
 
 from typing import Any, Optional
-import pytest
 
 from idns.contracts import (
     DNSCodecProtocol,
@@ -23,6 +22,7 @@ from idns.contracts import (
 
 class MockCodec:
     """Mock implementation of DNSCodecProtocol for unit test validation."""
+
     def encode(self, message: Any) -> bytes:
         return b"\x00\x01\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
 
@@ -35,6 +35,7 @@ class MockCodec:
 
 class MockTransport:
     """Mock implementation of DNSTransportProtocol for unit test validation."""
+
     def send_query(
         self,
         server: ServerAddress,
@@ -48,9 +49,25 @@ class MockTransport:
             tc_bit_set=False,
         )
 
+    def send_query_with_fallback(
+        self,
+        servers: list[ServerAddress],
+        query_bytes: bytes,
+        config: Optional[TransportConfig] = None,
+    ) -> TransportResult:
+        if not servers:
+            raise ValueError("No candidate DNS servers were provided.")
+
+        return self.send_query(
+            servers[0],
+            query_bytes,
+            config,
+        )
+
 
 class MockCache:
     """Mock implementation of DNSCacheProtocol for unit test validation."""
+
     def __init__(self):
         self._store: dict[CacheKey, CacheEntry] = {}
         self.stats = CacheStats()
@@ -86,6 +103,7 @@ class MockCache:
 
 class MockResolver:
     """Mock implementation of DNSResolverProtocol for unit test validation."""
+
     def resolve(
         self,
         domain_name: str,
@@ -117,8 +135,14 @@ def test_codec_protocol():
 def test_transport_protocol():
     transport = MockTransport()
     assert isinstance(transport, DNSTransportProtocol)
+
     server = ServerAddress(ip="198.41.0.4", port=53)
-    res = transport.send_query(server, b"test_query")
+
+    res = transport.send_query(
+        server,
+        b"test_query",
+    )
+
     assert res.rtt_ms == 12.5
     assert res.server_used.ip == "198.41.0.4"
     assert res.tc_bit_set is False
@@ -127,19 +151,31 @@ def test_transport_protocol():
 def test_cache_protocol():
     cache = MockCache()
     assert isinstance(cache, DNSCacheProtocol)
-    
+
     key = CacheKey("EXAMPLE.COM", "A")
     assert key.canonical().domain_name == "example.com"
-    
-    entry = CacheEntry(key=key, records=["93.184.216.34"], ttl_seconds=300, creation_timestamp=100.0)
+
+    entry = CacheEntry(
+        key=key,
+        records=["93.184.216.34"],
+        ttl_seconds=300,
+        creation_timestamp=100.0,
+    )
+
     cache.put(key, entry)
-    
-    hit = cache.get(CacheKey("example.com", "A"))
+
+    hit = cache.get(
+        CacheKey("example.com", "A")
+    )
+
     assert hit is not None
     assert hit.records == ["93.184.216.34"]
     assert cache.get_stats().hits == 1
 
-    miss = cache.get(CacheKey("other.com", "A"))
+    miss = cache.get(
+        CacheKey("other.com", "A")
+    )
+
     assert miss is None
     assert cache.get_stats().misses == 1
 
@@ -150,15 +186,23 @@ def test_cache_protocol():
 def test_resolver_protocol():
     resolver = MockResolver()
     assert isinstance(resolver, DNSResolverProtocol)
-    
+
     context = ResolutionContext(max_depth=5)
+
     context.increment_depth()
+
     assert context.current_depth == 1
-    
+
     context.record_cname("www.example.com")
+
     assert context.cname_chain == ["www.example.com"]
-    
-    result = resolver.resolve("example.com", "A", context)
+
+    result = resolver.resolve(
+        "example.com",
+        "A",
+        context,
+    )
+
     assert result.domain_name == "example.com"
     assert result.answers == ["93.184.216.34"]
     assert result.rcode == 0
