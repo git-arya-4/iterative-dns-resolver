@@ -7,7 +7,7 @@
 
 The cache will reduce repeated DNS queries, honor record TTLs, support RFC 2308
 negative caching, and expose metrics for later experiments. Task 1.6 defines
-the shared interface; storage and resolver integration are later tasks.
+the shared interface; `TTLCache` provides the Task 3.10 TTL storage behavior.
 
 ## API (`idns.contracts.cache`)
 
@@ -24,7 +24,7 @@ the shared interface; storage and resolver integration are later tasks.
   SOA, it returns the configured maximum.
 - `CacheStats` tracks hits, misses, evictions, size, and hit ratio.
 - `DNSCacheProtocol` requires `get`, `put`, `remove`, `clear`, and
-  `get_stats`. The later cache engine must implement this protocol.
+  `get_stats`. `TTLCache` in `idns.cache` is the initial implementation.
 
 ## Required behavior for later implementation
 
@@ -32,9 +32,11 @@ the shared interface; storage and resolver integration are later tasks.
 - Cache CNAMEs under the alias/type key and the target separately.
 - Distinguish NXDOMAIN (`is_nxdomain=True`) from NODATA (`False`).
 - Remove expired entries on lookup and apply a deterministic capacity policy.
+- `TTLCache.get()` accepts an optional timestamp so expiration is deterministic
+  in tests; normal callers use the current clock.
 
 ## Follow-up tasks
 
 - **2.7:** cache store/get/put skeleton.
-- **3.10:** TTL storage and expiration.
+- **3.10:** TTL storage and expiration (`TTLCache`).
 - **5.1-5.3:** positive and negative cache integration with the resolver.
