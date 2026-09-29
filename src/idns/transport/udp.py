@@ -14,6 +14,7 @@ from idns.errors import (
     ServerUnreachableError,
     TransportError,
 )
+from idns.transport.tcp import TCPTransport
 
 
 class UDPTransport(DNSTransportProtocol):
@@ -102,12 +103,23 @@ class UDPTransport(DNSTransportProtocol):
 
                 rtt_ms = (time.perf_counter() - start_time) * 1000
 
-                return TransportResult(
+                udp_result = TransportResult(
                     raw_response=raw_response,
                     server_used=server,
                     rtt_ms=rtt_ms,
                     tc_bit_set=tc_bit_set,
                 )
+
+                if tc_bit_set and config.enable_tcp_fallback:
+                    tcp_transport = TCPTransport()
+
+                    return tcp_transport.send_query(
+                        server,
+                        query_bytes,
+                        config,
+                    )
+
+                return udp_result
 
             except socket.timeout as exc:
                 last_error = exc
