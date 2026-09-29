@@ -6,6 +6,7 @@ from idns.contracts.transport import (
     TransportConfig,
     TransportResult,
 )
+from idns.iterative.bootstrap import NameserverBootstrap
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.referral import ReferralParser
 from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion
@@ -14,15 +15,17 @@ from idns.wire.message_encoder import DNSMessageEncoder
 
 
 class TLDQuery:
-    """Query TLD nameservers using referral and glue information."""
+    """Query TLD nameservers using referral, glue, and bootstrap information."""
 
     def __init__(
         self,
         transport: DNSTransportProtocol,
         transport_config: TransportConfig | None = None,
+        bootstrap: NameserverBootstrap | None = None,
     ) -> None:
         self.transport = transport
         self.transport_config = transport_config
+        self.bootstrap = bootstrap
 
     def query(
         self,
@@ -30,6 +33,7 @@ class TLDQuery:
         domain_name: str,
         delegated_zone: str,
         transaction_id: int = 0x1234,
+        record_type: str = "A",
     ) -> tuple[DNSMessage, TransportResult]:
         """Follow a referral and query one of its TLD nameservers."""
 
@@ -52,7 +56,12 @@ class TLDQuery:
         servers: list[ServerAddress] = []
 
         for nameserver in nameservers:
-            for address in glue.get(nameserver, []):
+            addresses = glue.get(nameserver, [])
+
+            if not addresses and self.bootstrap is not None:
+                addresses = self.bootstrap.resolve(nameserver)
+
+            for address in addresses:
                 servers.append(
                     ServerAddress(
                         ip=address,
@@ -64,7 +73,8 @@ class TLDQuery:
 
         if not servers:
             raise ValueError(
-                "No nameserver addresses were available from glue."
+                "No nameserver addresses were available from glue "
+                "or nameserver bootstrap."
             )
 
         message = DNSMessage(
@@ -75,7 +85,7 @@ class TLDQuery:
             questions=[
                 DNSQuestion(
                     qname=DNSName(domain_name),
-                    qtype="A",
+                    qtype=record_type,
                     qclass="IN",
                 )
             ],
