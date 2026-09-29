@@ -4,8 +4,10 @@ from collections.abc import Callable
 
 from idns.contracts.transport import (
     DNSTransportProtocol,
+    ServerAddress,
     TransportConfig,
 )
+from idns.iterative.authoritative_query import AuthoritativeQuery
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.referral import ReferralParser
 from idns.model import ARecord, AAAARecord, DNSName
@@ -25,6 +27,7 @@ class NameserverBootstrap:
         self.transport = transport
         self.transport_config = transport_config
         self.resolve_address = resolve_address
+        self._resolving: set[DNSName] = set()
 
     def resolve(self, nameserver: DNSName) -> list[str]:
         """Resolve a nameserver hostname to IPv4 and IPv6 addresses."""
@@ -42,19 +45,29 @@ class NameserverBootstrap:
                 "Nameserver bootstrap requires root server hints."
             )
 
-        addresses: list[str] = []
-
-        for record_type in ("A", "AAAA"):
-            resolved = self._resolve_iteratively(
-                nameserver,
-                record_type,
+        if nameserver in self._resolving:
+            raise ValueError(
+                f"Nameserver bootstrap recursion detected for {nameserver.value}."
             )
 
-            for address in resolved:
-                if address not in addresses:
-                    addresses.append(address)
+        self._resolving.add(nameserver)
 
-        return addresses
+        try:
+            addresses: list[str] = []
+
+            for record_type in ("A", "AAAA"):
+                resolved = self._resolve_iteratively(
+                    nameserver,
+                    record_type,
+                )
+
+                for address in resolved:
+                    if address not in addresses:
+                        addresses.append(address)
+
+            return addresses
+        finally:
+            self._resolving.remove(nameserver)
 
     def _resolve_iteratively(
         self,
@@ -88,18 +101,18 @@ class NameserverBootstrap:
         if len(labels) < 2:
             return []
 
-        delegated_zone = ".".join(labels[-1:])
+        tld_zone = ".".join(labels[-1:])
 
         tld_query = TLDQuery(
             transport=self.transport,
             transport_config=self.transport_config,
-            bootstrap=None,
+            bootstrap=self,
         )
 
         tld_response, _ = tld_query.query(
             root_response,
             nameserver.value,
-            delegated_zone,
+            tld_zone,
             record_type=record_type,
         )
 
@@ -110,9 +123,17 @@ class NameserverBootstrap:
             )
         )
 
+        if addresses:
+            return addresses
+
+        # The TLD response is a referral for the authoritative zone.
+        # If the target nameserver has no glue, use another nameserver
+        # from that referral when it has usable glue.
+        delegated_zone = ".".join(labels[-2:])
+
         nameservers = ReferralParser.select_nameservers(
             tld_response,
-            ".".join(labels[-2:]),
+            delegated_zone,
         )
 
         glue = GlueExtractor.extract(
@@ -120,9 +141,35 @@ class NameserverBootstrap:
             nameservers,
         )
 
-        for address in glue.get(nameserver, []):
-            if address not in addresses:
-                addresses.append(address)
+        authoritative_query = AuthoritativeQuery(
+            transport=self.transport,
+            transport_config=self.transport_config,
+        )
+
+        for referral_nameserver in nameservers:
+            for address in glue.get(referral_nameserver, []):
+                server = ServerAddress(
+                    ip=address,
+                    port=53,
+                    protocol="UDP",
+                    name=referral_nameserver.value,
+                )
+
+                authoritative_response, _ = authoritative_query.query(
+                    server,
+                    nameserver.value,
+                    record_type=record_type,
+                )
+
+                addresses.extend(
+                    self._extract_addresses(
+                        authoritative_response.answers,
+                        nameserver,
+                    )
+                )
+
+                if addresses:
+                    return addresses
 
         return addresses
 

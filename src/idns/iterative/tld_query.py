@@ -59,7 +59,13 @@ class TLDQuery:
             addresses = glue.get(nameserver, [])
 
             if not addresses and self.bootstrap is not None:
-                addresses = self.bootstrap.resolve(nameserver)
+                try:
+                    addresses = self.bootstrap.resolve(nameserver)
+                except ValueError:
+                    # This nameserver may be the hostname currently being
+                    # bootstrapped. Continue to other referral nameservers
+                    # that may have usable glue.
+                    addresses = []
 
             for address in addresses:
                 servers.append(
