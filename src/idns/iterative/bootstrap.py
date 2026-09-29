@@ -6,11 +6,13 @@ from idns.contracts.transport import (
     DNSTransportProtocol,
     TransportConfig,
 )
+from idns.iterative.glue import GlueExtractor
+from idns.iterative.referral import ReferralParser
 from idns.model import ARecord, AAAARecord, DNSName
 
 
 class NameserverBootstrap:
-    """Resolve nameserver hostnames using the project's DNS transport."""
+    """Resolve nameserver hostnames using the project's iterative DNS transport."""
 
     def __init__(
         self,
@@ -24,12 +26,8 @@ class NameserverBootstrap:
         self.transport_config = transport_config
         self.resolve_address = resolve_address
 
-    def resolve(
-        self,
-        nameserver: DNSName,
-    ) -> list[str]:
-        """Return addresses for a nameserver hostname."""
-
+    def resolve(self, nameserver: DNSName) -> list[str]:
+        """Resolve a nameserver hostname to IPv4 and IPv6 addresses."""
         if self.resolve_address is not None:
             return self.resolve_address(nameserver)
 
@@ -44,16 +42,25 @@ class NameserverBootstrap:
                 "Nameserver bootstrap requires root server hints."
             )
 
-        return self._resolve_iteratively(nameserver)
+        addresses: list[str] = []
+
+        for record_type in ("A", "AAAA"):
+            resolved = self._resolve_iteratively(
+                nameserver,
+                record_type,
+            )
+
+            for address in resolved:
+                if address not in addresses:
+                    addresses.append(address)
+
+        return addresses
 
     def _resolve_iteratively(
         self,
         nameserver: DNSName,
+        record_type: str,
     ) -> list[str]:
-        """Resolve a nameserver hostname through the DNS hierarchy."""
-
-        # Local imports avoid the circular dependency:
-        # bootstrap -> tld_query -> bootstrap.
         from idns.iterative.root_query import RootQuery
         from idns.iterative.tld_query import TLDQuery
 
@@ -65,7 +72,7 @@ class NameserverBootstrap:
 
         root_response, _ = root_query.query(
             nameserver.value,
-            record_type="A",
+            record_type=record_type,
         )
 
         addresses = self._extract_addresses(
@@ -93,21 +100,38 @@ class NameserverBootstrap:
             root_response,
             nameserver.value,
             delegated_zone,
-            record_type="A",
+            record_type=record_type,
         )
 
-        return self._extract_addresses(
-            tld_response.answers,
-            nameserver,
+        addresses.extend(
+            self._extract_addresses(
+                tld_response.answers,
+                nameserver,
+            )
         )
+
+        nameservers = ReferralParser.select_nameservers(
+            tld_response,
+            ".".join(labels[-2:]),
+        )
+
+        glue = GlueExtractor.extract(
+            tld_response,
+            nameservers,
+        )
+
+        for address in glue.get(nameserver, []):
+            if address not in addresses:
+                addresses.append(address)
+
+        return addresses
 
     @staticmethod
     def _extract_addresses(
         records: list[object],
         nameserver: DNSName,
     ) -> list[str]:
-        """Extract matching A and AAAA answers."""
-
+        """Extract matching A and AAAA records without duplicates."""
         addresses: list[str] = []
 
         for record in records:
