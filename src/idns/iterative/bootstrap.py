@@ -8,9 +8,10 @@ from idns.contracts.transport import (
     TransportConfig,
 )
 from idns.iterative.authoritative_query import AuthoritativeQuery
+from idns.iterative.delegation import DelegationTracker
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.referral import ReferralParser
-from idns.model import ARecord, AAAARecord, DNSName
+from idns.model import ARecord, AAAARecord, DNSMessage, DNSName, NSRecord
 
 
 class NameserverBootstrap:
@@ -126,52 +127,127 @@ class NameserverBootstrap:
         if addresses:
             return addresses
 
-        # The TLD response is a referral for the authoritative zone.
-        # If the target nameserver has no glue, use another nameserver
-        # from that referral when it has usable glue.
         delegated_zone = ".".join(labels[-2:])
+        tracker = DelegationTracker()
+        current_response = tld_response
+        current_zone = delegated_zone
 
-        nameservers = ReferralParser.select_nameservers(
-            tld_response,
-            delegated_zone,
-        )
+        while True:
+            referral_nameservers = ReferralParser.select_nameservers(
+                current_response,
+                current_zone,
+            )
 
-        glue = GlueExtractor.extract(
-            tld_response,
-            nameservers,
-        )
+            if not referral_nameservers:
+                return addresses
 
-        authoritative_query = AuthoritativeQuery(
-            transport=self.transport,
-            transport_config=self.transport_config,
-        )
+            tracker.record_referral(
+                current_zone,
+                referral_nameservers,
+            )
 
-        for referral_nameserver in nameservers:
-            for address in glue.get(referral_nameserver, []):
-                server = ServerAddress(
-                    ip=address,
-                    port=53,
-                    protocol="UDP",
-                    name=referral_nameserver.value,
-                )
+            glue = GlueExtractor.extract(
+                current_response,
+                referral_nameservers,
+            )
 
-                authoritative_response, _ = authoritative_query.query(
-                    server,
-                    nameserver.value,
-                    record_type=record_type,
-                )
+            authoritative_query = AuthoritativeQuery(
+                transport=self.transport,
+                transport_config=self.transport_config,
+            )
 
-                addresses.extend(
-                    self._extract_addresses(
-                        authoritative_response.answers,
-                        nameserver,
+            next_response: DNSMessage | None = None
+            progressed = False
+
+            for referral_nameserver in referral_nameservers:
+                server_addresses = glue.get(referral_nameserver, [])
+
+                if not server_addresses:
+                    try:
+                        server_addresses = self.resolve(referral_nameserver)
+                    except ValueError:
+                        server_addresses = []
+
+                for address in server_addresses:
+                    server = ServerAddress(
+                        ip=address,
+                        port=53,
+                        protocol="UDP",
+                        name=referral_nameserver.value,
                     )
-                )
 
-                if addresses:
-                    return addresses
+                    authoritative_response, _ = authoritative_query.query(
+                        server,
+                        nameserver.value,
+                        record_type=record_type,
+                    )
 
-        return addresses
+                    addresses.extend(
+                        self._extract_addresses(
+                            authoritative_response.answers,
+                            nameserver,
+                        )
+                    )
+
+                    if addresses:
+                        return addresses
+
+                    referral_zone = self._select_delegated_zone(
+                        authoritative_response,
+                        nameserver,
+                        current_zone,
+                    )
+
+                    if referral_zone is not None:
+                        next_response = authoritative_response
+                        current_zone = referral_zone
+                        progressed = True
+                        break
+
+                if progressed:
+                    break
+
+            if not progressed or next_response is None:
+                return addresses
+
+            current_response = next_response
+
+    @staticmethod
+    def _select_delegated_zone(
+        response: DNSMessage,
+        nameserver: DNSName,
+        current_zone: str,
+    ) -> str | None:
+        """Select the most specific referral zone below the current zone."""
+        current = DNSName(current_zone)
+        candidates: list[DNSName] = []
+
+        for record in response.authorities:
+            if not isinstance(record, NSRecord):
+                continue
+
+            zone = record.name
+
+            if zone == current:
+                continue
+
+            if len(zone.labels) <= len(current.labels):
+                continue
+
+            if len(nameserver.labels) < len(zone.labels):
+                continue
+
+            if nameserver.labels[-len(zone.labels):] != zone.labels:
+                continue
+
+            if zone not in candidates:
+                candidates.append(zone)
+
+        if not candidates:
+            return None
+
+        candidates.sort(key=lambda zone: len(zone.labels), reverse=True)
+        return candidates[0].value
 
     @staticmethod
     def _extract_addresses(

@@ -410,3 +410,99 @@ def test_bootstrap_continues_after_referral_when_target_has_no_glue():
 
     assert transport.queries[2][0][0].ip == "192.0.2.54"
     assert transport.queries[5][0][0].ip == "192.0.2.54"
+
+
+def test_bootstrap_follows_multiple_referrals():
+    nameserver = DNSName("ns1.sub.example.com")
+
+    root_response = DNSMessage(
+        header=DNSHeader(transaction_id=0x1234),
+        authorities=[
+            NSRecord(
+                name=DNSName("com"),
+                nameserver=DNSName("a.gtld-servers.net"),
+                ttl=86400,
+            )
+        ],
+        additionals=[
+            ARecord(
+                name=DNSName("a.gtld-servers.net"),
+                address="192.0.2.53",
+                ttl=86400,
+            )
+        ],
+    )
+
+    tld_response = DNSMessage(
+        header=DNSHeader(transaction_id=0x1234),
+        authorities=[
+            NSRecord(
+                name=DNSName("example.com"),
+                nameserver=DNSName("ns1.example.com"),
+                ttl=86400,
+            )
+        ],
+        additionals=[
+            ARecord(
+                name=DNSName("ns1.example.com"),
+                address="192.0.2.54",
+                ttl=86400,
+            )
+        ],
+    )
+
+    intermediate_response = DNSMessage(
+        header=DNSHeader(transaction_id=0x1234),
+        authorities=[
+            NSRecord(
+                name=DNSName("sub.example.com"),
+                nameserver=nameserver,
+                ttl=86400,
+            )
+        ],
+        additionals=[
+            ARecord(
+                name=nameserver,
+                address="192.0.2.55",
+                ttl=86400,
+            )
+        ],
+    )
+
+    authoritative_response = DNSMessage(
+        header=DNSHeader(transaction_id=0x1234),
+        answers=[
+            ARecord(
+                name=nameserver,
+                address="192.0.2.10",
+                ttl=300,
+            )
+        ],
+    )
+
+    transport = FakeTransport(
+        [
+            DNSMessageEncoder.encode(root_response),
+            DNSMessageEncoder.encode(tld_response),
+            DNSMessageEncoder.encode(intermediate_response),
+            DNSMessageEncoder.encode(authoritative_response),
+        ]
+    )
+
+    bootstrap = NameserverBootstrap(
+        root_servers=[
+            {
+                "name": "a.root-servers.net",
+                "ipv4": "198.41.0.4",
+            }
+        ],
+        transport=transport,
+    )
+
+    addresses = bootstrap._resolve_iteratively(
+        nameserver,
+        "A",
+    )
+
+    assert addresses == ["192.0.2.10"]
+    assert len(transport.queries) == 4
