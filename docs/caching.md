@@ -5,9 +5,9 @@
 
 ## Purpose
 
-The cache will reduce repeated DNS queries, honor record TTLs, support RFC 2308
-negative caching, and expose metrics for later experiments. Task 1.6 defines
-the shared interface; `TTLCache` provides the Task 3.10 TTL storage behavior.
+The cache reduces repeated DNS queries, honors record TTLs, supports RFC 2308
+negative caching, and exposes metrics for later experiments. `InMemoryDNSCache`
+provides the Task 3.10 and Tasks 5.1-5.3 cache behavior.
 
 ## API (`idns.contracts.cache`)
 
@@ -26,6 +26,15 @@ the shared interface; `TTLCache` provides the Task 3.10 TTL storage behavior.
 - `DNSCacheProtocol` requires `get`, `put`, `remove`, `clear`, and
   `get_stats`. `TTLCache` in `idns.cache` is the initial implementation.
 
+## Implemented behavior
+
+- `put_positive()` caches a positive RRset using its lowest record TTL.
+- `put_negative()` caches NXDOMAIN or NODATA entries. With an SOA record it
+  uses `min(SOA TTL, SOA MINIMUM)` capped by `negative_ttl_seconds`; without
+  one it uses that configured fallback TTL.
+- `get()` lazily removes expired positive and negative entries, recording a
+  cache miss and eviction.
+
 ## Required behavior for later implementation
 
 - Cache positive RRsets using the lowest TTL in the set.
@@ -39,4 +48,4 @@ the shared interface; `TTLCache` provides the Task 3.10 TTL storage behavior.
 
 - **2.7:** cache store/get/put skeleton.
 - **3.10:** TTL storage and expiration (`TTLCache`).
-- **5.1-5.3:** positive and negative cache integration with the resolver.
+- **5.1-5.3:** completed cache behavior; core-resolver integration remains.
