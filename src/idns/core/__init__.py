@@ -49,16 +49,25 @@ class CoreResolverScaffold(DNSResolverProtocol):
         if root_hints_path:
             self.load_root_hints(root_hints_path)
 
+        self.resolver_chain: Optional[DNSResolverProtocol] = None
+        if self.transport and self.cache:
+            from idns.iterative.engine import IterativeEngine
+            from idns.core.cache_aware import CacheAwareResolver
+
+            iterative_engine = IterativeEngine(
+                transport=self.transport,
+                root_servers=self.root_servers,
+            )
+            self.resolver_chain = CacheAwareResolver(
+                cache=self.cache,
+                iterative_resolver=iterative_engine,
+            )
+
     def create_context(
         self,
         context: Optional[ResolutionContext] = None,
     ) -> ResolutionContext:
-        """Return the supplied context or create a fresh resolution context.
-
-        This establishes the context boundary for the resolver skeleton without
-        starting resolution or invoking any injected dependency.
-        """
-
+        """Return the supplied context or create a fresh resolution context."""
         return context if context is not None else ResolutionContext()
 
     def load_root_hints(self, path: str | Path) -> list[dict[str, str]]:
@@ -84,13 +93,23 @@ class CoreResolverScaffold(DNSResolverProtocol):
         context: Optional[ResolutionContext] = None,
     ) -> ResolverResult:
         """
-        Scaffold entry point for domain resolution.
-        Actual iterative resolution algorithm will be implemented in Phase 5.
+        Final entry point for domain resolution (Task 5.8).
+        Validates input and delegates to the configured cache-aware resolver chain.
         """
-        raise NotImplementedError(
-            "Core resolution algorithm is scheduled for implementation in Phase 5. "
-            "Foundation scaffold loaded successfully."
-        )
+        if not isinstance(domain_name, str) or not domain_name.strip():
+            from idns.errors import ResolutionError
+            raise ResolutionError(f"Invalid domain name: '{domain_name}'")
+
+        if not isinstance(record_type, str) or not record_type.strip():
+            from idns.errors import ResolutionError
+            raise ResolutionError(f"Invalid record type: '{record_type}'")
+
+        record_type = record_type.upper().strip()
+
+        if not self.resolver_chain:
+            raise ConfigError("Resolver chain not initialized. Cache or iterative engine missing.")
+
+        return self.resolver_chain.resolve(domain_name, record_type, context)
 
 
 __all__ = ["CoreResolverScaffold"]

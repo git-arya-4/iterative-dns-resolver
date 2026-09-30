@@ -39,12 +39,12 @@ def test_core_resolver_invalid_hints_file(tmp_path):
     assert "Invalid JSON" in str(exc_info.value)
 
 
-def test_core_resolver_resolve_raises_not_implemented():
-    """Verify resolve method raises NotImplementedError at Phase 0."""
+def test_core_resolver_resolve_raises_config_error():
+    """Verify resolve method raises ConfigError if dependencies are missing (Phase 5)."""
     scaffold = CoreResolverScaffold()
-    with pytest.raises(NotImplementedError) as exc_info:
+    with pytest.raises(ConfigError) as exc_info:
         scaffold.resolve("example.com", "A")
-    assert "Phase 5" in str(exc_info.value)
+    assert "Resolver chain not initialized" in str(exc_info.value)
 
 
 def test_core_resolver_preserves_injected_dependencies():
@@ -97,23 +97,5 @@ def test_resolver_construction_does_not_use_network_or_cache():
 
     CoreResolverScaffold(transport=transport, cache=cache)
 
-    transport.assert_not_called()
-    cache.assert_not_called()
-
-
-def test_resolver_skeleton_does_not_invoke_dependencies_or_forward():
-    codec = MagicMock()
-    transport = MagicMock()
-    cache = MagicMock()
-    scaffold = CoreResolverScaffold(
-        codec=codec,
-        transport=transport,
-        cache=cache,
-    )
-
-    with pytest.raises(NotImplementedError):
-        scaffold.resolve("example.com", "A")
-
-    codec.assert_not_called()
     transport.assert_not_called()
     cache.assert_not_called()
