@@ -70,11 +70,10 @@ class CNAMEChainProcessor:
                 # there's ANOTHER CNAME or if we are done. We don't need a new network query.
                 continue
                 
-            # If the target is NOT answered in the same response, we must issue a new query
-            # via the callback to resolve the target.
+            chain_len_before = len(context.cname_chain)
             next_result = self.resolver_callback(target, record_type, context)
             print(f"DEBUG: resolving {target} returned {len(next_result.answers)} answers: {next_result.answers}")
-            
+
             # Merge answers from the new query into the current result
             current_result.answers.extend(next_result.answers)
             current_result.authoritative_servers.extend(next_result.authoritative_servers)
@@ -83,9 +82,15 @@ class CNAMEChainProcessor:
             current_result.total_rtt_ms += next_result.total_rtt_ms
             current_result.rcode = next_result.rcode
             current_result.is_nxdomain = next_result.is_nxdomain
-            
+
             # In a multi-hop scenario where the next result is a miss but target is NXDOMAIN
             if current_result.is_nxdomain:
+                break
+
+            # If the callback recursively processed CNAMEs (e.g. CacheAwareResolver), it would have added to the chain.
+            # If it did, we break to prevent duplicate processing of the same records.
+            # If it didn't (e.g. mock_resolver in unit tests), we loop again to process the newly appended answers.
+            if len(context.cname_chain) > chain_len_before:
                 break
 
         # Final record keeping

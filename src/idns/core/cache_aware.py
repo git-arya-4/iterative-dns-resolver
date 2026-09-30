@@ -66,7 +66,7 @@ class CacheAwareResolver(DNSResolverProtocol):
         # 3. Cache the Result
         if result.is_nxdomain or (result.rcode == 0 and not result.answers):
             # Negative Caching (NXDOMAIN or NODATA)
-            soa = next((r for r in result.authoritative_servers if getattr(r, 'type', '') == 'SOA'), None)
+            soa = next((r for r in result.authoritative_servers if getattr(r, 'record_type', '') == 'SOA'), None)
             ttl = compute_rfc2308_ttl(soa)
             
             neg_entry = CacheEntry.create_negative(

@@ -13,7 +13,7 @@ from idns.iterative.referral import ReferralParser
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.bootstrap import NameserverBootstrap
 from idns.iterative.delegation import DelegationTracker
-from idns.errors import MaxDepthExceededError, ReferralError
+from idns.errors import MaxDepthExceededError, ReferralError, DNSTimeoutError
 
 class IterativeEngine(DNSResolverProtocol):
     """
@@ -108,6 +108,7 @@ class IterativeEngine(DNSResolverProtocol):
 
             next_response: Optional[DNSMessage] = None
             progressed = False
+            last_timeout_error = None
 
             for referral_nameserver in referral_nameservers:
                 server_addresses = glue.get(referral_nameserver, [])
@@ -126,11 +127,18 @@ class IterativeEngine(DNSResolverProtocol):
                     )
                     context.queried_servers.append(address)
 
-                    auth_response, auth_result = authoritative_query.query(
-                        server,
-                        domain_name,
-                        record_type=record_type,
-                    )
+                    try:
+                        auth_response, auth_result = authoritative_query.query(
+                            server,
+                            domain_name,
+                            record_type=record_type,
+                        )
+                    except DNSTimeoutError as e:
+                        # Failover to the next address or referral nameserver
+                        last_timeout_error = e
+                        continue
+
+                    last_timeout_error = None
                     context.query_count += 1
                     total_rtt += auth_result.rtt_ms
 
@@ -153,9 +161,11 @@ class IterativeEngine(DNSResolverProtocol):
                     break
 
             if not progressed or next_response is None:
+                if last_timeout_error is not None:
+                    raise last_timeout_error
                 # No progress could be made, return best effort current response
                 return self._build_result(domain_name, record_type, current_response, context, total_rtt)
-                
+
             current_response = next_response
 
     def _is_final_answer(self, response: DNSMessage, domain_name: str) -> bool:
