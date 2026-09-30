@@ -69,3 +69,51 @@ def test_get_evicts_expired_negative_entry():
 
     assert cache.get(key) is None
     assert cache.get_stats().evictions == 1
+
+
+def test_max_entries_evicts_the_entry_that_expires_first():
+    cache = InMemoryDNSCache(CacheConfig(max_entries=1), clock=lambda: 100.0)
+    first_key = CacheKey("first.example.com", "A")
+    second_key = CacheKey("second.example.com", "A")
+
+    cache.put_positive(
+        first_key,
+        [ARecord(DNSName("first.example.com"), "192.0.2.1", ttl=10)],
+    )
+    cache.put_positive(
+        second_key,
+        [ARecord(DNSName("second.example.com"), "192.0.2.2", ttl=20)],
+    )
+
+    assert cache.get(first_key) is None
+    assert cache.get(second_key) is not None
+    assert cache.get_stats().size == 1
+    assert cache.get_stats().evictions == 1
+
+
+def test_nxdomain_entry_is_returned_for_a_different_record_type():
+    cache = InMemoryDNSCache(clock=lambda: 100.0)
+    cache.put_negative(
+        CacheKey("missing.example.com", "A"),
+        is_nxdomain=True,
+        ttl_seconds=60,
+    )
+
+    result = cache.get(CacheKey("missing.example.com", "AAAA"))
+
+    assert result is not None
+    assert result.is_negative is True
+    assert result.is_nxdomain is True
+
+
+def test_max_entries_zero_does_not_store_entries():
+    cache = InMemoryDNSCache(CacheConfig(max_entries=0), clock=lambda: 100.0)
+    key = CacheKey("example.com", "A")
+
+    cache.put_positive(
+        key,
+        [ARecord(DNSName("example.com"), "192.0.2.1", ttl=60)],
+    )
+
+    assert cache.get(key) is None
+    assert cache.get_stats().size == 0

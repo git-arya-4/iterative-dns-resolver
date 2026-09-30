@@ -13,6 +13,8 @@ from idns.contracts.cache import (
     compute_rfc2308_ttl,
 )
 
+_NXDOMAIN_RECORD_TYPE = "__NXDOMAIN__"
+
 
 class InMemoryDNSCache(DNSCacheProtocol):
     """DNS cache with lazy TTL expiration and RFC 2308 negative entries."""
@@ -39,13 +41,17 @@ class InMemoryDNSCache(DNSCacheProtocol):
             return None
 
         canonical_key = key.canonical()
-        entry = self._entries.get(canonical_key)
+        entry_key = canonical_key
+        entry = self._entries.get(entry_key)
+        if entry is None:
+            entry_key = self._nxdomain_key(canonical_key)
+            entry = self._entries.get(entry_key)
         now = self._clock() if current_timestamp is None else current_timestamp
         if entry is None:
             self._stats.misses += 1
             return None
         if entry.is_expired(now):
-            del self._entries[canonical_key]
+            del self._entries[entry_key]
             self._stats.misses += 1
             self._stats.evictions += 1
             self._stats.size = len(self._entries)
@@ -62,8 +68,29 @@ class InMemoryDNSCache(DNSCacheProtocol):
         canonical_key = key.canonical()
         if entry.key != canonical_key:
             entry = replace(entry, key=canonical_key)
+        if self._config.max_entries <= 0:
+            return
+        if canonical_key not in self._entries:
+            self._enforce_capacity()
         self._entries[canonical_key] = entry
         self._stats.size = len(self._entries)
+
+    def _enforce_capacity(self) -> None:
+        """Evict the entry with the earliest expiration at configured capacity."""
+        if len(self._entries) < self._config.max_entries:
+            return
+
+        key_to_evict = min(
+            self._entries,
+            key=lambda key: (
+                self._entries[key].creation_timestamp + self._entries[key].ttl_seconds,
+                key.domain_name,
+                key.record_type,
+                key.dns_class,
+            ),
+        )
+        del self._entries[key_to_evict]
+        self._stats.evictions += 1
 
     def put_positive(self, key: CacheKey, records: list[Any]) -> None:
         """Store a positive RRset using its lowest record TTL."""
@@ -100,14 +127,25 @@ class InMemoryDNSCache(DNSCacheProtocol):
             if ttl_seconds is None
             else max(0, ttl_seconds)
         )
+        storage_key = self._nxdomain_key(key) if is_nxdomain else key
         entry = CacheEntry.create_negative(
-            key,
+            storage_key,
             is_nxdomain,
             effective_ttl,
             soa_record=soa_record,
             creation_timestamp=self._clock(),
         )
-        self.put(key, entry)
+        self.put(storage_key, entry)
+
+    @staticmethod
+    def _nxdomain_key(key: CacheKey) -> CacheKey:
+        """Return the type-independent key used for an NXDOMAIN response."""
+        canonical_key = key.canonical()
+        return CacheKey(
+            canonical_key.domain_name,
+            _NXDOMAIN_RECORD_TYPE,
+            canonical_key.dns_class,
+        )
 
     def remove(self, key: CacheKey) -> bool:
         canonical_key = key.canonical()

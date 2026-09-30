@@ -34,6 +34,12 @@ provides the Task 3.10 and Tasks 5.1-5.3 cache behavior.
   one it uses that configured fallback TTL.
 - `get()` lazily removes expired positive and negative entries, recording a
   cache miss and eviction.
+- When capacity is reached, the cache evicts the entry with the earliest
+  expiration time. Ties are broken by canonical key values for repeatable
+  behavior.
+- NXDOMAIN entries are indexed by domain name and class, so one cached name
+  error applies to every queried record type. NODATA entries remain
+  record-type-specific.
 
 ## Required behavior for later implementation
 
