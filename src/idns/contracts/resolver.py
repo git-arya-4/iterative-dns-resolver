@@ -2,7 +2,7 @@
 Top-Level DNS Resolver Contract.
 
 Owner: Shared Contract (Orchestrated by Arya in idns.core, with Shriyansh/Swastik components)
-Phase: Phase 0 (Contract) / Phase 5 (Implementation)
+Phase: Implemented resolver contract
 
 Defines abstractions for top-level resolution request processing,
 resolution context tracing, CNAME loop/depth controls, and final results.
@@ -57,6 +57,7 @@ class ResolverResult:
     query_count: int = 0
     total_rtt_ms: float = 0.0
     cname_chain: list[str] = field(default_factory=list)
+    trace_log: list[str] = field(default_factory=list)
 
 
 @runtime_checkable

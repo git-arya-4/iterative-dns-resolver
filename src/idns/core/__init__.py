@@ -1,8 +1,7 @@
-"""
-Core Resolver Orchestration Subsystem.
+"""Core resolver orchestration subsystem.
 
 Owner: Arya
-Phase: Phase 0 (Foundation) & Phase 5 (Core Resolver Integration)
+Phase: Production core integration
 
 Responsibilities:
 - Coordinates cache lookups (Swastik) and iterative queries (Shriyansh)
@@ -12,6 +11,7 @@ Responsibilities:
 """
 
 import json
+import ipaddress
 from pathlib import Path
 from typing import Optional
 
@@ -23,15 +23,16 @@ from idns.contracts.resolver import (
     ResolverResult,
 )
 from idns.contracts.transport import DNSTransportProtocol
+from idns.contracts.transport import TransportConfig
 from idns.errors import ConfigError
 
 
-class CoreResolverScaffold(DNSResolverProtocol):
+SUPPORTED_RECORD_TYPES = frozenset({"A", "AAAA", "NS", "CNAME", "MX", "TXT", "SOA"})
+
+
+class CoreResolver(DNSResolverProtocol):
     """
-    Foundation scaffold for the Core DNS Resolver.
-    
-    Acts as the orchestration layer between cache, iterative resolution engine,
-    and CNAME processor. Full resolution logic will be integrated in Phase 5.
+    Production orchestration layer for the cache-aware iterative resolver.
     """
 
     def __init__(
@@ -40,6 +41,7 @@ class CoreResolverScaffold(DNSResolverProtocol):
         codec: Optional[DNSCodecProtocol] = None,
         transport: Optional[DNSTransportProtocol] = None,
         cache: Optional[DNSCacheProtocol] = None,
+        transport_config: Optional[TransportConfig] = None,
     ):
         self.codec = codec
         self.transport = transport
@@ -57,6 +59,7 @@ class CoreResolverScaffold(DNSResolverProtocol):
             iterative_engine = IterativeEngine(
                 transport=self.transport,
                 root_servers=self.root_servers,
+                transport_config=transport_config,
             )
             self.resolver_chain = CacheAwareResolver(
                 cache=self.cache,
@@ -79,9 +82,28 @@ class CoreResolverScaffold(DNSResolverProtocol):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            if not isinstance(data, dict):
+                raise ConfigError(f"Root hints document must be an object: {file_path}")
             self.root_servers = data.get("root_servers", [])
             if not self.root_servers:
                 raise ConfigError(f"No root servers defined in: {file_path}")
+            if not isinstance(self.root_servers, list):
+                raise ConfigError(f"root_servers must be a list: {file_path}")
+            for index, server in enumerate(self.root_servers):
+                if not isinstance(server, dict) or not isinstance(server.get("name"), str):
+                    raise ConfigError(f"Malformed root server entry at index {index}")
+                addresses = [server.get("ipv4"), server.get("ipv6")]
+                if not any(isinstance(address, str) and address for address in addresses):
+                    raise ConfigError(f"Root server '{server['name']}' has no address")
+                for address in addresses:
+                    if address:
+                        try:
+                            ipaddress.ip_address(address)
+                        except ValueError as exc:
+                            raise ConfigError(
+                                f"Invalid address '{address}' for root server '{server['name']}'",
+                                cause=exc,
+                            ) from exc
             return self.root_servers
         except json.JSONDecodeError as e:
             raise ConfigError(f"Invalid JSON in root hints file '{file_path}': {e}", cause=e)
@@ -100,11 +122,21 @@ class CoreResolverScaffold(DNSResolverProtocol):
             from idns.errors import ResolutionError
             raise ResolutionError(f"Invalid domain name: '{domain_name}'")
 
+        from idns.model import DNSName
+        try:
+            DNSName(domain_name)
+        except (ValueError, UnicodeError) as exc:
+            from idns.errors import ResolutionError
+            raise ResolutionError(f"Invalid domain name: '{domain_name}'", cause=exc) from exc
+
         if not isinstance(record_type, str) or not record_type.strip():
             from idns.errors import ResolutionError
             raise ResolutionError(f"Invalid record type: '{record_type}'")
 
         record_type = record_type.upper().strip()
+        if record_type not in SUPPORTED_RECORD_TYPES:
+            from idns.errors import ResolutionError
+            raise ResolutionError(f"Unsupported record type: '{record_type}'")
 
         if not self.resolver_chain:
             raise ConfigError("Resolver chain not initialized. Cache or iterative engine missing.")
@@ -112,4 +144,7 @@ class CoreResolverScaffold(DNSResolverProtocol):
         return self.resolver_chain.resolve(domain_name, record_type, context)
 
 
-__all__ = ["CoreResolverScaffold"]
+# Backwards-compatible name retained for callers from the foundation phase.
+CoreResolverScaffold = CoreResolver
+
+__all__ = ["CoreResolver", "CoreResolverScaffold"]

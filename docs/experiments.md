@@ -2,9 +2,9 @@
 
 **Owner**: Swastik + Shriyansh + Arya  
 **Subsystem Directory**: `experiments/`  
-**Phase**: Phase 8  
+**Status**: Not implemented
 
-> **Note**: This document will detail the methodology, trace replay data, and analysis scripts for the 4 mandatory course experiments:
+> **Note**: The experiment harness is outside the current implementation scope. The CLI returns a non-zero status instead of claiming to run an experiment. The planned experiments are:
 > 1. Cold vs Warm Resolution Latency
 > 2. Cache Hit Ratio over Replayed Query Trace
 > 3. Query Count per Resolution compared against `dig +trace`

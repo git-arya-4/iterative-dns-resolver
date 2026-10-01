@@ -15,9 +15,8 @@ becomes:
 
     03 www 07 example 03 com 00
 
-This task handles ordinary DNS names only.
-Compression pointers are handled separately in the later
-compression-related work.
+Complete DNS messages use ``DNSCompressionDecoder`` for compressed names;
+this small codec remains the uncompressed question-name codec.
 """
 
 from __future__ import annotations
@@ -118,9 +117,9 @@ class DNSNameCodec:
         """
         Decode a DNS name from a ByteCursor.
 
-        This basic implementation handles ordinary labels and the
-        terminating zero byte. Compression pointers are intentionally
-        not handled in Task 2.2.
+        This codec handles ordinary labels and the terminating zero byte.
+        Compressed names in complete messages are decoded by the dedicated
+        compression codec.
 
         Args:
             cursor: ByteCursor positioned at the beginning of a DNS name.
@@ -151,7 +150,8 @@ class DNSNameCodec:
 
             # Compression pointer.
             #
-            # Compression is not implemented in Task 2.2.
+            # Compression is handled by DNSCompressionDecoder for complete
+            # messages; this question-name codec rejects it explicitly.
             if (length & 0xC0) == 0xC0:
                 raise DNSNameDecodeError(
                     "DNS compression pointer encountered; "

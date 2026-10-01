@@ -38,6 +38,12 @@ def test_core_resolver_invalid_hints_file(tmp_path):
         scaffold.load_root_hints(invalid_json)
     assert "Invalid JSON" in str(exc_info.value)
 
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text('{"root_servers": [{"name": "root", "ipv4": "not-an-ip"}]}')
+    with pytest.raises(ConfigError) as exc_info:
+        scaffold.load_root_hints(malformed)
+    assert "Invalid address" in str(exc_info.value)
+
 
 def test_core_resolver_resolve_raises_config_error():
     """Verify resolve method raises ConfigError if dependencies are missing (Phase 5)."""

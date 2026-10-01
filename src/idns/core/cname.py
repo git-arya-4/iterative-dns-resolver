@@ -56,6 +56,7 @@ class CNAMEChainProcessor:
             context.increment_depth()
 
             current_name = target
+            context.trace_log.append(f"CNAME: {cname_record.name.value} -> {target}")
             
             # Check if the target is already resolved in the SAME response
             # e.g., a CNAME b, b A 1.2.3.4
@@ -93,4 +94,5 @@ class CNAMEChainProcessor:
 
         # Final record keeping
         current_result.cname_chain = list(context.cname_chain)
+        current_result.trace_log = list(context.trace_log)
         return current_result

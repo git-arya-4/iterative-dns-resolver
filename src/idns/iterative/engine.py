@@ -55,6 +55,7 @@ class IterativeEngine(DNSResolverProtocol):
         )
         context.query_count += 1
         total_rtt = root_result.rtt_ms
+        context.trace_log.append(f"root query: {domain_name} {record_type}")
 
         if self._is_final_answer(root_response, domain_name):
             return self._build_result(domain_name, record_type, root_response, context, total_rtt)
@@ -78,6 +79,7 @@ class IterativeEngine(DNSResolverProtocol):
         )
         context.query_count += 1
         total_rtt += tld_result.rtt_ms
+        context.trace_log.append(f"tld query: {domain_name} {record_type}")
 
         if self._is_final_answer(tld_response, domain_name):
             return self._build_result(domain_name, record_type, tld_response, context, total_rtt)
@@ -126,6 +128,9 @@ class IterativeEngine(DNSResolverProtocol):
                         name=referral_nameserver.value,
                     )
                     context.queried_servers.append(address)
+                    context.trace_log.append(
+                        f"authoritative query: {referral_nameserver.value} ({address})"
+                    )
 
                     try:
                         auth_response, auth_result = authoritative_query.query(
@@ -136,6 +141,7 @@ class IterativeEngine(DNSResolverProtocol):
                     except DNSTimeoutError as e:
                         # Failover to the next address or referral nameserver
                         last_timeout_error = e
+                        context.trace_log.append(f"timeout/failover: {address}")
                         continue
 
                     last_timeout_error = None
@@ -202,4 +208,5 @@ class IterativeEngine(DNSResolverProtocol):
             query_count=context.query_count,
             total_rtt_ms=total_rtt,
             cname_chain=list(context.cname_chain),
+            trace_log=list(context.trace_log),
         )

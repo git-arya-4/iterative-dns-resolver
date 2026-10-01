@@ -2,6 +2,6 @@
 
 **Owner**: Swastik + Arya + Avidipta  
 **Subsystem Package**: `src/idns/server/`  
-**Phase**: Phase 6  
+**Status**: Not implemented
 
-> **Note**: This document will contain technical documentation for the local DNS server listener accepting incoming OS resolver queries on port 53 / 5353 and routing responses through the core resolver.
+> **Note**: The local DNS server listener is outside the current implementation scope. The CLI returns a non-zero status instead of claiming to start a server.

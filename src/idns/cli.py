@@ -1,15 +1,16 @@
-"""
-CLI Scaffolding for Iterative DNS Resolver.
-
-Provides CLI entry points for query testing, server operation, and experiments.
-"""
+"""Command-line entry points for the iterative DNS resolver."""
 
 import argparse
 import sys
 from pathlib import Path
 
-from idns.core import CoreResolverScaffold
-from idns.errors import DNSError
+from idns.cache import InMemoryDNSCache
+from idns.contracts.resolver import ResolutionContext, ResolverResult
+from idns.core import CoreResolver
+from idns.errors import ConfigError, DNSError
+from idns.transport.udp import UDPTransport
+
+SUPPORTED_RECORD_TYPES = ("A", "AAAA", "NS", "CNAME", "MX", "TXT", "SOA")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.1.0-foundation",
+        version="%(prog)s 0.1.0",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -38,9 +39,18 @@ def build_parser() -> argparse.ArgumentParser:
     resolve_parser = subparsers.add_parser("resolve", help="Query a domain name using iterative resolution")
     resolve_parser.add_argument("domain", help="Domain FQDN to resolve (e.g. example.com)")
     resolve_parser.add_argument(
+        "record_type",
+        nargs="?",
+        type=str.upper,
+        choices=SUPPORTED_RECORD_TYPES,
+        help="DNS record type (default: A)",
+    )
+    resolve_parser.add_argument(
         "-t", "--type",
-        default="A",
-        choices=["A", "AAAA", "NS", "CNAME", "MX", "TXT", "SOA"],
+        dest="type_option",
+        type=str.upper,
+        choices=SUPPORTED_RECORD_TYPES,
+        default=None,
         help="DNS record type to query (default: A)",
     )
     resolve_parser.add_argument("--trace", action="store_true", help="Print iterative resolution step trace")
@@ -61,6 +71,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _format_record(record: object) -> str:
+    record_type = getattr(record, "record_type", type(record).__name__)
+    name = getattr(getattr(record, "name", None), "value", "?")
+    ttl = getattr(record, "ttl", "?")
+    details = []
+    for attribute in ("address", "canonical_name", "nameserver", "preference", "exchange", "text", "mname", "rname", "serial", "minimum"):
+        if hasattr(record, attribute):
+            value = getattr(record, attribute)
+            details.append(getattr(value, "value", value))
+    suffix = " ".join(str(value) for value in details)
+    return f"{name} {ttl} IN {record_type}" + (f" {suffix}" if suffix else "")
+
+
+def _print_result(result: ResolverResult, trace: bool) -> None:
+    print(f"Query: {result.domain_name} {result.record_type}")
+    print(f"Status: {'NXDOMAIN' if result.is_nxdomain else f'RCODE={result.rcode}'}")
+    print(f"Cache: {'hit' if result.is_cache_hit else 'miss'}")
+    print(f"Queries: {result.query_count}")
+    if result.answers:
+        print("Answers:")
+        for record in result.answers:
+            print(f"  {_format_record(record)}")
+    else:
+        print("Answers: (none)")
+    if result.cname_chain:
+        print(f"CNAME chain: {' -> '.join(result.cname_chain)}")
+    if trace:
+        print("Trace:")
+        for event in getattr(result, "trace_log", []):
+            print(f"  {event}")
+
+
 def main(args: list[str] | None = None) -> int:
     """CLI execution entry point."""
     parser = build_parser()
@@ -71,26 +113,31 @@ def main(args: list[str] | None = None) -> int:
         return 0
 
     try:
-        # Instantiate core scaffold to verify root hints loading
-        hints_path = Path(parsed_args.config)
-        scaffold = CoreResolverScaffold(root_hints_path=hints_path if hints_path.exists() else None)
-        
-        if parsed_args.command == "resolve":
-            print(f"[IDNS CLI] Resolving '{parsed_args.domain}' (Type: {parsed_args.type})...")
-            print(
-                "[IDNS CLI] Note: Core iterative resolution algorithm will be integrated in Phase 5.\n"
-                "           Root hints configuration loaded successfully."
-            )
-            return 0
-        elif parsed_args.command == "server":
-            print(f"[IDNS CLI] Starting local DNS server on {parsed_args.host}:{parsed_args.port}...")
-            print("[IDNS CLI] Note: Local DNS server module is scheduled for implementation in Phase 6.")
-            return 0
-        elif parsed_args.command == "experiment":
-            print(f"[IDNS CLI] Running experiment trace '{parsed_args.name}'...")
-            print("[IDNS CLI] Note: Experiment harness is scheduled for execution in Phase 8.")
-            return 0
+        if parsed_args.command == "server":
+            print("server mode is not yet implemented", file=sys.stderr)
+            return 2
+        if parsed_args.command == "experiment":
+            print("experiment mode is not yet implemented", file=sys.stderr)
+            return 2
 
+        hints_path = Path(parsed_args.config)
+        if not hints_path.is_file():
+            raise ConfigError(f"Root hints file not found at: {hints_path}")
+
+        if parsed_args.command == "resolve":
+            record_type = parsed_args.type_option or parsed_args.record_type or "A"
+            resolver = CoreResolver(
+                root_hints_path=hints_path,
+                transport=UDPTransport(),
+                cache=InMemoryDNSCache(),
+            )
+            context = ResolutionContext()
+            result = resolver.resolve(parsed_args.domain, record_type, context)
+            # ResolverResult intentionally remains the stable public result;
+            # trace events are carried by the context used for this query.
+            result.trace_log = list(context.trace_log)
+            _print_result(result, parsed_args.trace)
+            return 0
     except DNSError as e:
         print(f"[IDNS ERROR] {e.message}", file=sys.stderr)
         return 1

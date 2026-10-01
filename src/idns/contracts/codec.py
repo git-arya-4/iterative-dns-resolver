@@ -2,7 +2,7 @@
 DNS Wire Codec Contract.
 
 Owner: Shared Contract (Implemented by Avidipta in src/idns/wire)
-Phase: Phase 0 (Contract) / Phase 2-3 (Implementation)
+Phase: Implemented wire codec contract
 
 Defines the interface for hand-crafted RFC 1035 wire format encoding,
 decoding, compression pointer handling, and binary validation.

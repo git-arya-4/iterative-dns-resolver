@@ -2,7 +2,7 @@
 DNS Socket Transport Contract.
 
 Owner: Shared Contract (Implemented by Shriyansh in src/idns/transport)
-Phase: Phase 0 (Contract) / Phase 2-3 (Implementation)
+Phase: Implemented transport contract
 
 Defines abstractions for low-level UDP socket queries, timeout, retry,
 candidate server selection, and automatic TCP fallback when TC=1.

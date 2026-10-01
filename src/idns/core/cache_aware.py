@@ -46,6 +46,7 @@ class CacheAwareResolver(DNSResolverProtocol):
 
         if entry is not None:
             # CACHE HIT
+            context.trace_log.append(f"cache hit: {key.domain_name} {key.record_type}")
             result = ResolverResult(
                 domain_name=domain_name,
                 record_type=record_type,
@@ -56,11 +57,13 @@ class CacheAwareResolver(DNSResolverProtocol):
                 is_cache_hit=True,
                 query_count=context.query_count,
                 cname_chain=list(context.cname_chain),
+                trace_log=list(context.trace_log),
             )
             # Process CNAMEs on cached results
             return self.cname_processor.process(domain_name, record_type, result, context)
 
         # 2. CACHE MISS -> Iterative Resolution
+        context.trace_log.append(f"cache miss: {key.domain_name} {key.record_type}")
         result = self.iterative_resolver.resolve(domain_name, record_type, context)
 
         # 3. Cache the Result

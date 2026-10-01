@@ -36,7 +36,7 @@ This project is a hand-crafted, socket-level **Iterative DNS Resolver with Cachi
    - TTL-based eviction
    - RFC 2308 negative caching (NXDOMAIN & NODATA)
    - CNAME loop protection and depth controls
-9. **OS Integration**: Local DNS server daemon accepting OS resolver queries and browser web traffic.
+9. **OS Integration**: Planned local DNS server daemon (not yet implemented).
 10. **Experimental Suite**:
    - Cold vs. warm resolution latency
    - Cache hit ratio over replayed query traces
@@ -51,7 +51,7 @@ All Python runtime code lives strictly inside `src/idns/`:
 
 ```
 src/idns/
-├── cli.py               [Arya] CLI argument parser & subcommand scaffold
+├── cli.py               [Arya] CLI and production resolver entry point
 ├── errors.py            [Arya] Unified exception hierarchy
 ├── contracts/           [Arya] Stable interfaces & types (NO protocol logic)
 ├── core/                [Arya] Resolver orchestrator & CNAME processor
@@ -89,10 +89,10 @@ pytest -v
 # Display CLI help
 idns-resolver --help
 
-# Query command scaffold
+# Query command (iterative resolution)
 idns-resolver resolve example.com -t A
 
-# Local DNS server scaffold
+# Local DNS server (currently reports that server mode is unavailable)
 idns-resolver server --port 5353
 ```
 
@@ -100,5 +100,4 @@ idns-resolver server --port 5353
 
 ## 5. Current Project Stage
 
-> **Current Phase**: **Phase 0 (Foundation - Tasks 0.1 to 0.4)**  
-> All stable contracts, exception hierarchies, directory skeletons under `src/idns/`, CI pipelines, root hints configurations, and foundation tests are established. Core DNS protocol logic will be implemented incrementally by subsystem owners in subsequent phases.
+> **Current state**: Core iterative resolution, caching, CNAME processing, transport, wire handling, and CLI resolution are implemented and tested. Local server mode and the experiment harness remain future work and report an explicit unavailable status.
