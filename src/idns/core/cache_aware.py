@@ -90,16 +90,59 @@ class CacheAwareResolver(DNSResolverProtocol):
         
         elif result.rcode == 0 and result.answers:
             # Positive Caching
-            # Determine minimum TTL among answers
-            ttls = [getattr(r, 'ttl', 300) for r in result.answers if hasattr(r, 'ttl')]
-            min_ttl = min(ttls) if ttls else 300
-            
-            pos_entry = CacheEntry.create_positive(
-                key=key,
-                records=result.answers,
-                ttl_seconds=min_ttl,
-            )
-            self.cache.put(key, pos_entry)
+            self._cache_positive_result(key, result)
 
         # 4. Process CNAMEs on network result
         return self.cname_processor.process(domain_name, record_type, result, context)
+
+    def _cache_positive_result(self, key: CacheKey, result: ResolverResult) -> None:
+        """Cache positive RRsets without combining unrelated owner names.
+
+        A response containing a CNAME and its in-message target can contain
+        multiple independently expiring RRsets.  Keep the alias CNAME under
+        the original query key and index each reachable target separately so
+        later queries can use those RRsets without another iterative lookup.
+        """
+        cname_records = [
+            record for record in result.answers if isinstance(record, CNAMERecord)
+        ]
+        if not cname_records:
+            self._put_positive(key, result.answers)
+            return
+
+        records_by_name: dict[str, list[object]] = {}
+        for record in result.answers:
+            name = getattr(getattr(record, "name", None), "value", "").lower().rstrip(".")
+            if name:
+                records_by_name.setdefault(name, []).append(record)
+
+        # Follow only CNAME targets reachable from the queried owner.  This
+        # avoids caching unrelated answer/additional records from the packet.
+        current_name = key.domain_name
+        visited: set[str] = set()
+        while current_name not in visited:
+            visited.add(current_name)
+            owner_records = records_by_name.get(current_name, [])
+            cname_rrset = [record for record in owner_records if isinstance(record, CNAMERecord)]
+            if cname_rrset:
+                self._put_positive(key.__class__(current_name, key.record_type, key.dns_class), cname_rrset)
+                current_name = cname_rrset[0].canonical_name.value.lower().rstrip(".")
+                continue
+
+            target_rrset = [
+                record for record in owner_records
+                if getattr(record, "record_type", "").upper() == key.record_type
+            ]
+            if target_rrset:
+                self._put_positive(key.__class__(current_name, key.record_type, key.dns_class), target_rrset)
+            break
+
+    def _put_positive(self, key: CacheKey, records: list[object]) -> None:
+        """Store one RRset using the lowest TTL in that RRset."""
+        if not records:
+            return
+        min_ttl = min(getattr(record, "ttl", 300) for record in records)
+        self.cache.put(
+            key,
+            CacheEntry.create_positive(key, records, min_ttl),
+        )

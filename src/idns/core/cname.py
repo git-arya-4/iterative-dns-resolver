@@ -72,8 +72,6 @@ class CNAMEChainProcessor:
                 
             chain_len_before = len(context.cname_chain)
             next_result = self.resolver_callback(target, record_type, context)
-            print(f"DEBUG: resolving {target} returned {len(next_result.answers)} answers: {next_result.answers}")
-
             # Merge answers from the new query into the current result
             current_result.answers.extend(next_result.answers)
             current_result.authoritative_servers.extend(next_result.authoritative_servers)

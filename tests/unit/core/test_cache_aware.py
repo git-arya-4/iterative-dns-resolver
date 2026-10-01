@@ -87,3 +87,69 @@ def test_negative_caching_nodata():
     res2 = resolver.resolve("nodata.example", "AAAA")
     assert not res2.is_cache_hit
     assert iterative.calls == 2
+
+
+def test_cname_target_rrset_is_cached_separately():
+    class SameResponseResolver:
+        def __init__(self):
+            self.calls = 0
+
+        def resolve(self, domain_name, record_type="A", context=None):
+            self.calls += 1
+            return ResolverResult(domain_name, record_type, answers=[
+                CNAMERecord(DNSName("alias.example"), DNSName("target.example"), 100),
+                ARecord(DNSName("target.example"), "1.2.3.4", 50),
+            ])
+
+    cache = InMemoryDNSCache()
+    iterative = SameResponseResolver()
+    resolver = CacheAwareResolver(cache, iterative)
+
+    first = resolver.resolve("alias.example", "A")
+    assert first.answers[-1].address == "1.2.3.4"
+
+    alias_entry = cache.get(CacheKey.from_query("alias.example", "A"))
+    target_entry = cache.get(CacheKey.from_query("target.example", "A"))
+    assert alias_entry is not None
+    assert alias_entry.records == [CNAMERecord(
+        DNSName("alias.example"), DNSName("target.example"), 100
+    )]
+    assert alias_entry.ttl_seconds == 100
+    assert target_entry is not None
+    assert target_entry.records == [ARecord(DNSName("target.example"), "1.2.3.4", 50)]
+    assert target_entry.ttl_seconds == 50
+
+    iterative.calls = 0
+    second = resolver.resolve("target.example", "A")
+    assert second.is_cache_hit
+    assert second.answers[0].address == "1.2.3.4"
+    assert iterative.calls == 0
+
+
+def test_cname_target_rrsets_are_cached_for_same_response_multi_hop():
+    class SameResponseResolver:
+        def __init__(self):
+            self.calls = 0
+
+        def resolve(self, domain_name, record_type="A", context=None):
+            self.calls += 1
+            return ResolverResult(domain_name, record_type, answers=[
+                CNAMERecord(DNSName("alias.example"), DNSName("target1.example"), 100),
+                CNAMERecord(DNSName("target1.example"), DNSName("target2.example"), 80),
+                ARecord(DNSName("target2.example"), "1.2.3.4", 50),
+            ])
+
+    cache = InMemoryDNSCache()
+    iterative = SameResponseResolver()
+    resolver = CacheAwareResolver(cache, iterative)
+
+    first = resolver.resolve("alias.example", "A")
+    assert [record.record_type for record in first.answers] == ["CNAME", "CNAME", "A"]
+    iterative.calls = 0
+
+    target1 = resolver.resolve("target1.example", "A")
+    target2 = resolver.resolve("target2.example", "A")
+    assert target1.is_cache_hit
+    assert target2.is_cache_hit
+    assert target2.answers[0].address == "1.2.3.4"
+    assert iterative.calls == 0
