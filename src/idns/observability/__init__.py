@@ -7,3 +7,7 @@ Responsibilities:
 - Resolution step tracing and performance latency metrics
 - Cache hit ratio counters and export utilities for experiments
 """
+
+from .metrics import DNSMetrics, ThreadSafeDNSMetrics
+
+__all__ = ["DNSMetrics", "ThreadSafeDNSMetrics"]
