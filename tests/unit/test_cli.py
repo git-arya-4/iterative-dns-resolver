@@ -38,9 +38,22 @@ def test_resolve_command_invokes_real_resolver_and_prints_result(monkeypatch, ca
     assert "fake resolution event" in output
 
 
-def test_cli_unimplemented_commands_fail_without_fake_success(capsys):
-    assert main(["server"]) == 2
-    assert "not yet implemented" in capsys.readouterr().err
+def test_cli_server_starts_without_entering_real_loop(monkeypatch, capsys):
+    started = []
+
+    class FakeServer:
+        def __init__(self, resolver, host, port):
+            started.append((resolver, host, port))
+
+        def serve_forever(self):
+            return
+
+    monkeypatch.setattr("idns.cli.UDPDNSServer", FakeServer)
+    assert main(["server"]) == 0
+    assert started[0][1:] == ("127.0.0.1", 5353)
+
+
+def test_cli_experiment_reports_unimplemented(capsys):
     assert main(["experiment", "cold_warm"]) == 2
     assert "not yet implemented" in capsys.readouterr().err
 

@@ -49,3 +49,20 @@ def test_handler_returns_formerr_for_malformed_packet():
     response = DNSMessageDecoder.decode(handler.handle(b"bad", ("127.0.0.1", 1))[0])
     assert response.header.qr == 1
     assert response.header.rcode == 1
+
+
+def test_handler_returns_formerr_for_valid_packet_with_wrong_question_count():
+    packet = DNSMessageEncoder.encode(DNSMessage(header=DNSHeader(transaction_id=9)))
+    handler = DNSRequestHandler(FakeResolver())
+    response = DNSMessageDecoder.decode(handler.handle(packet)[0])
+    assert response.header.rcode == 1
+
+
+def test_error_response_preserves_request_flags():
+    request = DNSMessage(
+        header=DNSHeader(transaction_id=9, opcode=1, rd=1),
+        questions=[DNSQuestion(DNSName("example.com"), "A")],
+    )
+    response = DNSResponseBuilder.error(request, 2)
+    assert response.header.opcode == 1
+    assert response.header.rd == 1

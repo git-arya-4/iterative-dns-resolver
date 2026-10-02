@@ -17,7 +17,9 @@ class DNSRequestHandler:
         try:
             request = DNSMessageDecoder.decode(packet)
             if request.header.qr or len(request.questions) != 1:
-                raise ValueError("DNS server accepts one query question")
+                response = DNSResponseBuilder.error(request, 1)
+                self.metrics.record(success=False, malformed=True, latency_ms=self._elapsed(started))
+                return DNSMessageEncoder.encode(response), client_address
             question = request.questions[0]
             result = self.resolver.resolve(str(question.qname), question.qtype, ResolutionContext())
             response = DNSResponseBuilder.build(request, result)
@@ -28,7 +30,7 @@ class DNSRequestHandler:
                 response = DNSResponseBuilder.error(transaction_id, 1)
                 self.metrics.record(success=False, malformed=True, latency_ms=self._elapsed(started))
             else:
-                response = DNSResponseBuilder.error(request.header.transaction_id, 2, request.questions[0] if request.questions else None)
+                response = DNSResponseBuilder.error(request, 2)
                 self.metrics.record(success=False, latency_ms=self._elapsed(started))
         return DNSMessageEncoder.encode(response), client_address
 

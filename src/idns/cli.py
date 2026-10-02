@@ -133,9 +133,8 @@ def main(args: list[str] | None = None) -> int:
             UDPDNSServer(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
             return 0
         elif parsed_args.command == "experiment":
-            print(f"[IDNS CLI] Running experiment trace '{parsed_args.name}'...")
-            print("[IDNS CLI] Note: Experiment harness is scheduled for execution in Phase 8.")
-            return 0
+            print("experiment mode is not yet implemented", file=sys.stderr)
+            return 2
 
     except DNSError as e:
         print(f"[IDNS ERROR] {e.message}", file=sys.stderr)

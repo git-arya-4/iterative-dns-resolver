@@ -33,3 +33,8 @@ class ThreadSafeDNSMetrics(DNSMetrics):
     def record(self, **kwargs) -> None:
         with self._lock:
             super().record(**kwargs)
+
+    @property
+    def average_latency_ms(self) -> float:
+        with self._lock:
+            return super().average_latency_ms

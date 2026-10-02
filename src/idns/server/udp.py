@@ -1,4 +1,5 @@
 import socket
+import threading
 
 from idns.server.handler import DNSRequestHandler
 
@@ -8,17 +9,24 @@ class UDPDNSServer:
         self.host, self.port = host, port
         self.handler = DNSRequestHandler(resolver, metrics)
         self._socket = None
+        self._stop_event = threading.Event()
 
     def serve_forever(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             self._socket = sock
+            sock.settimeout(0.2)
             sock.bind((self.host, self.port))
             self.port = sock.getsockname()[1]
-            while True:
-                packet, address = sock.recvfrom(4096)
+            while not self._stop_event.is_set():
+                try:
+                    packet, address = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
                 response, _ = self.handler.handle(packet, address)
                 sock.sendto(response, address)
+            self._socket = None
 
     def close(self) -> None:
+        self._stop_event.set()
         if self._socket:
             self._socket.close()
