@@ -4,9 +4,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from idns.core import CoreResolverScaffold
-from idns.errors import DNSError
+from idns.cache import InMemoryDNSCache
+from idns.contracts import ResolutionContext, ResolverResult
+from idns.core import CoreResolver, SUPPORTED_RECORD_TYPES
+from idns.errors import ConfigError, DNSError
 from idns.server import UDPDNSServer
+from idns.transport.udp import UDPTransport
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -109,44 +112,31 @@ def main(args: list[str] | None = None) -> int:
         return 0
 
     try:
-        # Instantiate core scaffold to verify root hints loading
         hints_path = Path(parsed_args.config)
-        scaffold = CoreResolverScaffold(root_hints_path=hints_path if hints_path.exists() else None)
-        
+        if not hints_path.is_file():
+            raise ConfigError(f"Root hints file not found at: {hints_path}")
+
+        resolver = CoreResolver(
+            root_hints_path=hints_path,
+            transport=UDPTransport(),
+            cache=InMemoryDNSCache(),
+        )
+
         if parsed_args.command == "resolve":
-            print(f"[IDNS CLI] Resolving '{parsed_args.domain}' (Type: {parsed_args.type})...")
-            print(
-                "[IDNS CLI] Note: Core iterative resolution algorithm will be integrated in Phase 5.\n"
-                "           Root hints configuration loaded successfully."
-            )
+            record_type = parsed_args.type_option or parsed_args.record_type or "A"
+            context = ResolutionContext()
+            result = resolver.resolve(parsed_args.domain, record_type, context)
+            _print_result(result, parsed_args.trace)
             return 0
         elif parsed_args.command == "server":
             print(f"[IDNS CLI] Starting local DNS server on {parsed_args.host}:{parsed_args.port}...")
-            UDPDNSServer(scaffold, host=parsed_args.host, port=parsed_args.port).serve_forever()
+            UDPDNSServer(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
             return 0
         elif parsed_args.command == "experiment":
             print(f"[IDNS CLI] Running experiment trace '{parsed_args.name}'...")
             print("[IDNS CLI] Note: Experiment harness is scheduled for execution in Phase 8.")
             return 0
 
-        hints_path = Path(parsed_args.config)
-        if not hints_path.is_file():
-            raise ConfigError(f"Root hints file not found at: {hints_path}")
-
-        if parsed_args.command == "resolve":
-            record_type = parsed_args.type_option or parsed_args.record_type or "A"
-            resolver = CoreResolver(
-                root_hints_path=hints_path,
-                transport=UDPTransport(),
-                cache=InMemoryDNSCache(),
-            )
-            context = ResolutionContext()
-            result = resolver.resolve(parsed_args.domain, record_type, context)
-            # ResolverResult intentionally remains the stable public result;
-            # trace events are carried by the context used for this query.
-            result.trace_log = list(context.trace_log)
-            _print_result(result, parsed_args.trace)
-            return 0
     except DNSError as e:
         print(f"[IDNS ERROR] {e.message}", file=sys.stderr)
         return 1
