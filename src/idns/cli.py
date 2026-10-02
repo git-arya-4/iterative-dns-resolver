@@ -8,7 +8,7 @@ from idns.cache import InMemoryDNSCache
 from idns.contracts import ResolutionContext, ResolverResult
 from idns.core import CoreResolver, SUPPORTED_RECORD_TYPES
 from idns.errors import ConfigError, DNSError
-from idns.server import UDPDNSServer
+from idns.server import TCPDNSServer, UDPDNSServer
 from idns.transport.udp import UDPTransport
 
 
@@ -58,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     server_parser = subparsers.add_parser("server", help="Run local DNS server daemon")
     server_parser.add_argument("-p", "--port", type=int, default=5353, help="Port to listen on (default: 5353)")
     server_parser.add_argument("--host", default="127.0.0.1", help="Host address to bind (default: 127.0.0.1)")
+    server_parser.add_argument("--tcp", action="store_true", help="Use DNS-over-TCP instead of UDP")
 
     # Command: experiment
     exp_parser = subparsers.add_parser("experiment", help="Run project experiment suite")
@@ -130,7 +131,8 @@ def main(args: list[str] | None = None) -> int:
             return 0
         elif parsed_args.command == "server":
             print(f"[IDNS CLI] Starting local DNS server on {parsed_args.host}:{parsed_args.port}...")
-            UDPDNSServer(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
+            server_type = TCPDNSServer if parsed_args.tcp else UDPDNSServer
+            server_type(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
             return 0
         elif parsed_args.command == "experiment":
             print("experiment mode is not yet implemented", file=sys.stderr)

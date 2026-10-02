@@ -1,6 +1,8 @@
+import socket
+
 from idns.contracts.resolver import ResolverResult
 from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion
-from idns.server import DNSRequestHandler, DNSResponseBuilder
+from idns.server import DNSRequestHandler, DNSResponseBuilder, TCPDNSServer
 from idns.observability import DNSMetrics
 from idns.wire import DNSMessageEncoder
 from idns.wire.message_decoder import DNSMessageDecoder
@@ -66,3 +68,30 @@ def test_error_response_preserves_request_flags():
     response = DNSResponseBuilder.error(request, 2)
     assert response.header.opcode == 1
     assert response.header.rd == 1
+
+
+def test_tcp_server_frames_dns_response():
+    server = TCPDNSServer(FakeResolver())
+    left, right = socket.socketpair()
+    try:
+        left.sendall(len(query_packet()).to_bytes(2, "big") + query_packet())
+        server.handle_connection(right)
+        length = int.from_bytes(left.recv(2), "big")
+        response = DNSMessageDecoder.decode(left.recv(length))
+        assert response.header.qr == 1
+        assert response.header.transaction_id == 0x1234
+    finally:
+        left.close()
+        right.close()
+
+
+def test_tcp_server_rejects_empty_dns_message():
+    server = TCPDNSServer(FakeResolver())
+    left, right = socket.socketpair()
+    try:
+        left.sendall((0).to_bytes(2, "big"))
+        server.handle_connection(right)
+        assert left.recv(1) == b""
+    finally:
+        left.close()
+        right.close()

@@ -13,5 +13,6 @@ Responsibilities:
 from .handler import DNSRequestHandler
 from .response import DNSResponseBuilder
 from .udp import UDPDNSServer
+from .tcp import TCPDNSServer
 
-__all__ = ["DNSRequestHandler", "DNSResponseBuilder", "UDPDNSServer"]
+__all__ = ["DNSRequestHandler", "DNSResponseBuilder", "UDPDNSServer", "TCPDNSServer"]
