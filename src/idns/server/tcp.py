@@ -26,6 +26,10 @@ class TCPDNSServer:
                     connection, _ = sock.accept()
                 except socket.timeout:
                     continue
+                except OSError:
+                    if self._stop_event.is_set():
+                        break
+                    raise
                 with connection:
                     self.handle_connection(connection)
             self._socket = None

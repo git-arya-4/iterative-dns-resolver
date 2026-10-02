@@ -2,7 +2,7 @@
 Local DNS Server Subsystem.
 
 Owner: Swastik + Arya + Avidipta
-Status: Not implemented
+Status: Implemented
 Responsibilities:
 - Socket listener accepting incoming DNS queries on port 53 / 5353
 - Decoding client requests via Codec and routing through core Resolver

@@ -22,8 +22,16 @@ class UDPDNSServer:
                     packet, address = sock.recvfrom(4096)
                 except socket.timeout:
                     continue
+                except OSError:
+                    if self._stop_event.is_set():
+                        break
+                    raise
                 response, _ = self.handler.handle(packet, address)
-                sock.sendto(response, address)
+                try:
+                    sock.sendto(response, address)
+                except OSError:
+                    if not self._stop_event.is_set():
+                        raise
             self._socket = None
 
     def close(self) -> None:
