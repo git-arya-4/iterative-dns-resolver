@@ -36,7 +36,7 @@ This project is a hand-crafted, socket-level **Iterative DNS Resolver with Cachi
    - TTL-based eviction
    - RFC 2308 negative caching (NXDOMAIN & NODATA)
    - CNAME loop protection and depth controls
-9. **OS Integration**: Planned local DNS server daemon (not yet implemented).
+9. **OS Integration**: Local UDP DNS server daemon with optional TCP listener.
 10. **Experimental Suite**:
    - Cold vs. warm resolution latency
    - Cache hit ratio over replayed query traces
@@ -92,12 +92,15 @@ idns-resolver --help
 # Query command (iterative resolution)
 idns-resolver resolve example.com -t A
 
-# Local DNS server (currently reports that server mode is unavailable)
+# Local UDP DNS server
 idns-resolver server --port 5353
+
+# Optional DNS-over-TCP server
+idns-resolver server --tcp --port 5353
 ```
 
 ---
 
 ## 5. Current Project Stage
 
-> **Current state**: Core iterative resolution, caching, CNAME processing, transport, wire handling, and CLI resolution are implemented and tested. Local server mode and the experiment harness remain future work and report an explicit unavailable status.
+> **Current state**: Core iterative resolution, caching, CNAME processing, transport, wire handling, CLI resolution, and local UDP/TCP server modes are implemented and tested. The experiment harness remains future work and reports an explicit unavailable status.

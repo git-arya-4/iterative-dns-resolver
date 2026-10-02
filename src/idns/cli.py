@@ -5,12 +5,11 @@ import sys
 from pathlib import Path
 
 from idns.cache import InMemoryDNSCache
-from idns.contracts.resolver import ResolutionContext, ResolverResult
-from idns.core import CoreResolver
+from idns.contracts import ResolutionContext, ResolverResult
+from idns.core import CoreResolver, SUPPORTED_RECORD_TYPES
 from idns.errors import ConfigError, DNSError
+from idns.server import TCPDNSServer, UDPDNSServer
 from idns.transport.udp import UDPTransport
-
-SUPPORTED_RECORD_TYPES = ("A", "AAAA", "NS", "CNAME", "MX", "TXT", "SOA")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,6 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     server_parser = subparsers.add_parser("server", help="Run local DNS server daemon")
     server_parser.add_argument("-p", "--port", type=int, default=5353, help="Port to listen on (default: 5353)")
     server_parser.add_argument("--host", default="127.0.0.1", help="Host address to bind (default: 127.0.0.1)")
+    server_parser.add_argument("--tcp", action="store_true", help="Use DNS-over-TCP instead of UDP")
 
     # Command: experiment
     exp_parser = subparsers.add_parser("experiment", help="Run project experiment suite")
@@ -113,31 +113,31 @@ def main(args: list[str] | None = None) -> int:
         return 0
 
     try:
-        if parsed_args.command == "server":
-            print("server mode is not yet implemented", file=sys.stderr)
-            return 2
-        if parsed_args.command == "experiment":
-            print("experiment mode is not yet implemented", file=sys.stderr)
-            return 2
-
         hints_path = Path(parsed_args.config)
         if not hints_path.is_file():
             raise ConfigError(f"Root hints file not found at: {hints_path}")
 
+        resolver = CoreResolver(
+            root_hints_path=hints_path,
+            transport=UDPTransport(),
+            cache=InMemoryDNSCache(),
+        )
+
         if parsed_args.command == "resolve":
             record_type = parsed_args.type_option or parsed_args.record_type or "A"
-            resolver = CoreResolver(
-                root_hints_path=hints_path,
-                transport=UDPTransport(),
-                cache=InMemoryDNSCache(),
-            )
             context = ResolutionContext()
             result = resolver.resolve(parsed_args.domain, record_type, context)
-            # ResolverResult intentionally remains the stable public result;
-            # trace events are carried by the context used for this query.
-            result.trace_log = list(context.trace_log)
             _print_result(result, parsed_args.trace)
             return 0
+        elif parsed_args.command == "server":
+            print(f"[IDNS CLI] Starting local DNS server on {parsed_args.host}:{parsed_args.port}...")
+            server_type = TCPDNSServer if parsed_args.tcp else UDPDNSServer
+            server_type(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
+            return 0
+        elif parsed_args.command == "experiment":
+            print("experiment mode is not yet implemented", file=sys.stderr)
+            return 2
+
     except DNSError as e:
         print(f"[IDNS ERROR] {e.message}", file=sys.stderr)
         return 1
