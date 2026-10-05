@@ -10,6 +10,7 @@ class TCPDNSServer:
     def __init__(self, resolver, host="127.0.0.1", port=5353, metrics=None):
         self.host, self.port = host, port
         self.handler = DNSRequestHandler(resolver, metrics)
+        self._handler_lock = threading.Lock()
         self._socket = None
         self._stop_event = threading.Event()
         self._connections: set[socket.socket] = set()
@@ -63,7 +64,8 @@ class TCPDNSServer:
             if length == 0:
                 return
             packet = self._receive_exact(connection, length)
-            response, _ = self.handler.handle(packet)
+            with self._handler_lock:
+                response, _ = self.handler.handle(packet)
             if len(response) > 65535:
                 return
             connection.sendall(len(response).to_bytes(2, "big") + response)
