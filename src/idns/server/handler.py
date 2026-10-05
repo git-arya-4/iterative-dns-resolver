@@ -1,7 +1,7 @@
 import time
 
 from idns.contracts.resolver import ResolutionContext
-from idns.observability.metrics import DNSMetrics
+from idns.observability.metrics import DNSMetrics, ThreadSafeDNSMetrics
 from idns.wire import DNSMessageDecoder, DNSMessageEncoder
 from idns.server.response import DNSResponseBuilder
 
@@ -9,7 +9,7 @@ from idns.server.response import DNSResponseBuilder
 class DNSRequestHandler:
     def __init__(self, resolver, metrics: DNSMetrics | None = None):
         self.resolver = resolver
-        self.metrics = metrics or DNSMetrics()
+        self.metrics = metrics if metrics is not None else ThreadSafeDNSMetrics()
 
     def handle(self, packet: bytes, client_address=None) -> tuple[bytes, tuple | None]:
         started = time.perf_counter()
