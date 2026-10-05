@@ -139,3 +139,240 @@ def test_tcp_transport_uses_configured_timeout():
         )
 
     mock_socket.settimeout.assert_called_once_with(5.0)
+# ---------------------------------------------------------------------------
+# TCP edge-case coverage requested in Phase 7.2 review
+# ---------------------------------------------------------------------------
+
+class FakeTCPSocket:
+    def __init__(self, *, recv_chunks=None, connect_error=None):
+        self.recv_chunks = list(recv_chunks or [])
+        self.connect_error = connect_error
+        self.timeout = None
+        self.connected_to = None
+        self.sent_data = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def settimeout(self, timeout):
+        self.timeout = timeout
+
+    def connect(self, address):
+        self.connected_to = address
+        if self.connect_error is not None:
+            raise self.connect_error
+
+    def sendall(self, data):
+        self.sent_data = data
+
+    def recv(self, size):
+        if not self.recv_chunks:
+            return b""
+        return self.recv_chunks.pop(0)
+
+
+def _tcp_response(
+    *,
+    transaction_id=0x1234,
+    flags=0x8000,
+    body=b"",
+):
+    payload = (
+        transaction_id.to_bytes(2, "big")
+        + flags.to_bytes(2, "big")
+        + b"\x00\x00\x00\x00\x00\x00\x00\x00"
+        + body
+    )
+    return len(payload).to_bytes(2, "big") + payload
+
+
+def test_tcp_transport_handles_fragmented_response(monkeypatch):
+    import idns.transport.tcp as tcp_module
+    from idns.contracts.transport import ServerAddress
+    from idns.transport.tcp import TCPTransport
+
+    response = _tcp_response(transaction_id=0x1234)
+
+    fake_socket = FakeTCPSocket(
+        recv_chunks=[
+            b"\x00",
+            b"\x0c",
+            response[2:5],
+            response[5:8],
+            response[8:],
+        ]
+    )
+
+    monkeypatch.setattr(
+        tcp_module.socket,
+        "socket",
+        lambda *args, **kwargs: fake_socket,
+    )
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+    query = b"\x12\x34" + b"\x00" * 10
+
+    result = transport.send_query(server, query)
+
+    assert result.raw_response == response[2:]
+    assert result.server_used == server
+    assert result.is_tcp is True
+
+
+def test_tcp_transport_converts_socket_timeout_to_dns_timeout(monkeypatch):
+    import socket
+    import idns.transport.tcp as tcp_module
+    from idns.contracts.transport import ServerAddress
+    from idns.errors import DNSTimeoutError
+    from idns.transport.tcp import TCPTransport
+
+    fake_socket = FakeTCPSocket(
+        connect_error=socket.timeout("timed out")
+    )
+
+    monkeypatch.setattr(
+        tcp_module.socket,
+        "socket",
+        lambda *args, **kwargs: fake_socket,
+    )
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+
+    with pytest.raises(DNSTimeoutError):
+        transport.send_query(
+            server,
+            b"\x12\x34" + b"\x00" * 10,
+        )
+
+
+def test_tcp_transport_converts_socket_error_to_server_unreachable(
+    monkeypatch,
+):
+    import idns.transport.tcp as tcp_module
+    from idns.contracts.transport import ServerAddress
+    from idns.errors import ServerUnreachableError
+    from idns.transport.tcp import TCPTransport
+
+    fake_socket = FakeTCPSocket(
+        connect_error=OSError("connection refused")
+    )
+
+    monkeypatch.setattr(
+        tcp_module.socket,
+        "socket",
+        lambda *args, **kwargs: fake_socket,
+    )
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+
+    with pytest.raises(ServerUnreachableError):
+        transport.send_query(
+            server,
+            b"\x12\x34" + b"\x00" * 10,
+        )
+
+
+def test_tcp_transport_rejects_non_response_packet(monkeypatch):
+    import idns.transport.tcp as tcp_module
+    from idns.contracts.transport import ServerAddress
+    from idns.errors import TransportError
+    from idns.transport.tcp import TCPTransport
+
+    response = _tcp_response(
+        transaction_id=0x1234,
+        flags=0x0000,
+    )
+
+    fake_socket = FakeTCPSocket(
+        recv_chunks=[
+            response[:2],
+            response[2:],
+        ]
+    )
+
+    monkeypatch.setattr(
+        tcp_module.socket,
+        "socket",
+        lambda *args, **kwargs: fake_socket,
+    )
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+
+    with pytest.raises(TransportError, match="response flag"):
+        transport.send_query(
+            server,
+            b"\x12\x34" + b"\x00" * 10,
+        )
+
+
+def test_tcp_transport_rejects_connection_closed_before_complete_response(
+    monkeypatch,
+):
+    import idns.transport.tcp as tcp_module
+    from idns.contracts.transport import ServerAddress
+    from idns.errors import ServerUnreachableError
+    from idns.transport.tcp import TCPTransport
+
+    response_length = b"\x00\x0c"
+
+    fake_socket = FakeTCPSocket(
+        recv_chunks=[
+            response_length,
+            b"",
+        ]
+    )
+
+    monkeypatch.setattr(
+        tcp_module.socket,
+        "socket",
+        lambda *args, **kwargs: fake_socket,
+    )
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+
+    with pytest.raises(
+        ServerUnreachableError,
+        match="complete response",
+    ):
+        transport.send_query(
+            server,
+            b"\x12\x34" + b"\x00" * 10,
+        )
+
+
+def test_tcp_transport_rejects_oversized_query():
+    from idns.contracts.transport import ServerAddress
+    from idns.errors import TransportError
+    from idns.transport.tcp import TCPTransport
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+
+    with pytest.raises(TransportError, match="too large"):
+        transport.send_query(
+            server,
+            b"\x12\x34" + b"\x00" * 65534,
+        )
+
+
+def test_tcp_transport_rejects_query_shorter_than_transaction_id():
+    from idns.contracts.transport import ServerAddress
+    from idns.errors import TransportError
+    from idns.transport.tcp import TCPTransport
+
+    transport = TCPTransport()
+    server = ServerAddress("192.0.2.53")
+
+    with pytest.raises(TransportError, match="too short"):
+        transport.send_query(
+            server,
+            b"\x12",
+        )
