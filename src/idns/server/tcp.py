@@ -32,13 +32,12 @@ class TCPDNSServer:
                     if self._stop_event.is_set():
                         break
                     raise
-                with self._connections_lock:
-                    self._connections.add(connection)
-                threading.Thread(
-                    target=self._serve_connection,
-                    args=(connection,),
-                    daemon=True,
-                ).start()
+                if self._register_connection(connection):
+                    threading.Thread(
+                        target=self._serve_connection,
+                        args=(connection,),
+                        daemon=True,
+                    ).start()
             self._socket = None
 
     def _serve_connection(self, connection: socket.socket) -> None:
@@ -47,6 +46,15 @@ class TCPDNSServer:
         finally:
             with self._connections_lock:
                 self._connections.discard(connection)
+
+    def _register_connection(self, connection: socket.socket) -> bool:
+        """Register an accepted connection unless shutdown has begun."""
+        with self._connections_lock:
+            if self._stop_event.is_set():
+                connection.close()
+                return False
+            self._connections.add(connection)
+            return True
 
     def handle_connection(self, connection: socket.socket) -> None:
         try:

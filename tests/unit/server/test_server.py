@@ -95,3 +95,22 @@ def test_tcp_server_rejects_empty_dns_message():
     finally:
         left.close()
         right.close()
+
+
+def test_tcp_server_closes_connection_accepted_after_shutdown_snapshot():
+    server = TCPDNSServer(FakeResolver())
+    connection = _FakeConnection()
+
+    server.close()
+    server._register_connection(connection)
+
+    assert connection.closed
+    assert connection not in server._connections
+
+
+class _FakeConnection:
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
