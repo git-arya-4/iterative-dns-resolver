@@ -57,3 +57,31 @@ def test_server_handles_real_request_and_shuts_down_cleanly(server_type):
         server.close()
         thread.join(timeout=2)
     assert not thread.is_alive()
+
+
+def test_tcp_server_accepts_new_clients_while_one_client_is_idle():
+    server = TCPDNSServer(FakeResolver(), host="127.0.0.1", port=0)
+    server_thread = threading.Thread(target=server.serve_forever)
+    server_thread.start()
+    idle_client = None
+    active_client = None
+    try:
+        wait_for_port(server)
+        idle_client = socket.create_connection((server.host, server.port), timeout=2)
+        active_client = socket.create_connection((server.host, server.port), timeout=2)
+        active_client.settimeout(2)
+        packet = query_packet()
+        active_client.sendall(len(packet).to_bytes(2, "big") + packet)
+
+        response_length = int.from_bytes(recv_exact(active_client, 2), "big")
+        response = DNSMessageDecoder.decode(recv_exact(active_client, response_length))
+        assert response.header.transaction_id == 0x1234
+        assert response.header.qr == 1
+    finally:
+        if idle_client is not None:
+            idle_client.close()
+        if active_client is not None:
+            active_client.close()
+        server.close()
+        server_thread.join(timeout=2)
+    assert not server_thread.is_alive()

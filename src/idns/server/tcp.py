@@ -12,6 +12,8 @@ class TCPDNSServer:
         self.handler = DNSRequestHandler(resolver, metrics)
         self._socket = None
         self._stop_event = threading.Event()
+        self._connections: set[socket.socket] = set()
+        self._connections_lock = threading.Lock()
 
     def serve_forever(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -30,9 +32,21 @@ class TCPDNSServer:
                     if self._stop_event.is_set():
                         break
                     raise
-                with connection:
-                    self.handle_connection(connection)
+                with self._connections_lock:
+                    self._connections.add(connection)
+                threading.Thread(
+                    target=self._serve_connection,
+                    args=(connection,),
+                    daemon=True,
+                ).start()
             self._socket = None
+
+    def _serve_connection(self, connection: socket.socket) -> None:
+        try:
+            self.handle_connection(connection)
+        finally:
+            with self._connections_lock:
+                self._connections.discard(connection)
 
     def handle_connection(self, connection: socket.socket) -> None:
         try:
@@ -54,6 +68,10 @@ class TCPDNSServer:
         self._stop_event.set()
         if self._socket:
             self._socket.close()
+        with self._connections_lock:
+            connections = tuple(self._connections)
+        for connection in connections:
+            connection.close()
 
     @staticmethod
     def _receive_exact(connection: socket.socket, size: int) -> bytes:
