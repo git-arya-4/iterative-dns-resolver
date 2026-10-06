@@ -3,7 +3,7 @@ import socket
 from idns.contracts.resolver import ResolverResult
 from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion
 from idns.server import DNSRequestHandler, DNSResponseBuilder, TCPDNSServer
-from idns.observability import DNSMetrics
+from idns.observability import DNSMetrics, ThreadSafeDNSMetrics
 from idns.wire import DNSMessageEncoder
 from idns.wire.message_decoder import DNSMessageDecoder
 
@@ -60,6 +60,23 @@ def test_handler_returns_formerr_for_valid_packet_with_wrong_question_count():
     assert response.header.rcode == 1
 
 
+def test_handler_returns_servfail_when_resolver_raises():
+    class FailingResolver:
+        def resolve(self, domain_name, record_type, context=None):
+            raise RuntimeError("resolver failed")
+
+    metrics = ThreadSafeDNSMetrics()
+    handler = DNSRequestHandler(FailingResolver(), metrics=metrics)
+
+    response = DNSMessageDecoder.decode(handler.handle(query_packet())[0])
+
+    assert response.header.transaction_id == 0x1234
+    assert response.header.rcode == 2
+    assert metrics.requests == 1
+    assert metrics.successes == 0
+    assert metrics.failures == 1
+
+
 def test_error_response_preserves_request_flags():
     request = DNSMessage(
         header=DNSHeader(transaction_id=9, opcode=1, rd=1),
@@ -92,6 +109,25 @@ def test_tcp_server_rejects_empty_dns_message():
         left.sendall((0).to_bytes(2, "big"))
         server.handle_connection(right)
         assert left.recv(1) == b""
+    finally:
+        left.close()
+        right.close()
+
+
+def test_tcp_server_receives_fragmented_length_prefix_and_payload():
+    server = TCPDNSServer(FakeResolver())
+    left, right = socket.socketpair()
+    try:
+        packet = query_packet()
+        framed = len(packet).to_bytes(2, "big") + packet
+        for byte in framed:
+            left.send(bytes([byte]))
+        server.handle_connection(right)
+
+        response_length = int.from_bytes(left.recv(2), "big")
+        response = DNSMessageDecoder.decode(left.recv(response_length))
+        assert response.header.transaction_id == 0x1234
+        assert response.header.rcode == 0
     finally:
         left.close()
         right.close()
