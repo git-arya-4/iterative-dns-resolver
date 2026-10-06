@@ -37,3 +37,18 @@ PYTHONPATH=src python -m idns.cli experiment cache_hit_ratio \
 
 The report includes per-query hit/miss status, total hits and misses, and the
 overall ratio (`cache_hits / total_queries`).
+
+## Query count comparison with `dig +trace`
+
+Compare the resolver's recorded query count with responses observed from a
+local `dig +trace` run:
+
+```bash
+PYTHONPATH=src python -m idns.cli experiment query_count \
+  --domain example.com --record-type A \
+  --output experiments/query_count/results.json
+```
+
+The result records both counts and their difference. If `dig` is unavailable,
+the report sets `dig_available` to `false` and leaves the comparison counts
+as `null`.

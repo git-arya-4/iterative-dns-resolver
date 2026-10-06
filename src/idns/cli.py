@@ -73,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     exp_parser.add_argument("--samples", type=int, default=5, help="Timed samples per phase (default: 5)")
     exp_parser.add_argument("--output", type=Path, help="Write experiment JSON to this path")
     exp_parser.add_argument("--trace-file", type=Path, help="JSON query trace for cache_hit_ratio")
+    exp_parser.add_argument("--dig-command", default="dig", help="dig executable for query_count")
 
     return parser
 
@@ -164,6 +165,23 @@ def main(args: list[str] | None = None) -> int:
                 if parsed_args.trace_file is None:
                     raise ValueError("--trace-file is required for cache_hit_ratio")
                 result = run_cache_hit_ratio(resolver, load_trace(parsed_args.trace_file))
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
+            if parsed_args.name == "query_count":
+                from idns.experiments import run_query_count_comparison
+
+                result = run_query_count_comparison(
+                    resolver,
+                    parsed_args.domain,
+                    parsed_args.record_type,
+                    dig_command=parsed_args.dig_command,
+                )
                 encoded = json.dumps(result, indent=2)
                 if parsed_args.output:
                     parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
