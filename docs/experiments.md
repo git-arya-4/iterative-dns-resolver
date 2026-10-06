@@ -23,3 +23,17 @@ PYTHONPATH=src python -m idns.cli experiment cold_warm \
 Cold samples clear the resolver cache before each timed resolution. Warm samples
 prime the cache once, then measure cache-backed resolutions. Results contain raw
 latencies in milliseconds and minimum, median, mean, and maximum summaries.
+
+## Cache hit ratio over a replayed trace
+
+Generate or provide a JSON array of `{ "domain": "...", "record_type": "A" }`
+entries, then replay it:
+
+```bash
+PYTHONPATH=src python -m idns.cli experiment cache_hit_ratio \
+  --trace-file experiments/cache_hit_ratio/query_trace.json \
+  --output experiments/cache_hit_ratio/results.json
+```
+
+The report includes per-query hit/miss status, total hits and misses, and the
+overall ratio (`cache_hits / total_queries`).
