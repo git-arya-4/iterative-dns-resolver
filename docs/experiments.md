@@ -52,3 +52,18 @@ PYTHONPATH=src python -m idns.cli experiment query_count \
 The result records both counts and their difference. If `dig` is unavailable,
 the report sets `dig_available` to `false` and leaves the comparison counts
 as `null`.
+
+## Unreachable authoritative server
+
+Run this experiment with a resolver configured to use an unreachable
+authoritative endpoint:
+
+```bash
+PYTHONPATH=src python -m idns.cli experiment unreachable_authoritative \
+  --domain example.com --record-type A \
+  --output experiments/unreachable_authoritative/results.json
+```
+
+The report records whether resolution failed, the exception type and message,
+elapsed time, and query metadata. The experiment does not alter retry or
+timeout settings; configure the resolver/transport before running it.

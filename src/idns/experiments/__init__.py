@@ -3,6 +3,7 @@
 from .cold_warm import run_cold_warm
 from .cache_hit_ratio import load_trace, run_cache_hit_ratio
 from .query_count import count_dig_trace_responses, run_query_count_comparison
+from .unreachable_authoritative import run_unreachable_authoritative
 
 __all__ = [
     "count_dig_trace_responses",
@@ -10,4 +11,5 @@ __all__ = [
     "run_cache_hit_ratio",
     "run_cold_warm",
     "run_query_count_comparison",
+    "run_unreachable_authoritative",
 ]

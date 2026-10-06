@@ -190,6 +190,22 @@ def main(args: list[str] | None = None) -> int:
                 else:
                     print(encoded)
                 return 0
+            if parsed_args.name == "unreachable_authoritative":
+                from idns.experiments import run_unreachable_authoritative
+
+                result = run_unreachable_authoritative(
+                    resolver,
+                    parsed_args.domain,
+                    parsed_args.record_type,
+                )
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
             print(f"experiment '{parsed_args.name}' is not yet implemented", file=sys.stderr)
             return 2
 

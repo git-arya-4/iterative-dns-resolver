@@ -53,11 +53,6 @@ def test_cli_server_starts_without_entering_real_loop(monkeypatch, capsys):
     assert started[0][1:] == ("127.0.0.1", 5353)
 
 
-def test_cli_experiment_reports_unimplemented(capsys):
-    assert main(["experiment", "unreachable_authoritative"]) == 2
-    assert "not yet implemented" in capsys.readouterr().err
-
-
 def test_resolve_parser_accepts_positional_case_insensitive_type():
     args = build_parser().parse_args(["resolve", "example.com", "aaaa"])
     assert args.record_type == "AAAA"
