@@ -1,5 +1,5 @@
 from idns.cache import InMemoryDNSCache
-from idns.contracts.cache import CacheEntry, CacheKey, DNSCacheProtocol
+from idns.contracts.cache import CacheConfig, CacheEntry, CacheKey, DNSCacheProtocol
 
 
 def make_entry(key: CacheKey, record: str = "answer") -> CacheEntry:
@@ -109,3 +109,15 @@ def test_cache_satisfies_protocol_and_tracks_basic_statistics():
     assert stats.evictions == 0
     assert stats.size == 1
     assert stats.hit_ratio == 0.5
+
+
+def test_disabled_cache_does_not_store_or_report_hits():
+    cache = InMemoryDNSCache(CacheConfig(enabled=False))
+    key = CacheKey("example.com")
+
+    cache.put(key, make_entry(key))
+
+    assert cache.get(key) is None
+    assert cache.get_stats().hits == 0
+    assert cache.get_stats().misses == 1
+    assert cache.get_stats().size == 0
