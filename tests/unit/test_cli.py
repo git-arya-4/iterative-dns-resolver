@@ -54,7 +54,7 @@ def test_cli_server_starts_without_entering_real_loop(monkeypatch, capsys):
 
 
 def test_cli_experiment_reports_unimplemented(capsys):
-    assert main(["experiment", "cold_warm"]) == 2
+    assert main(["experiment", "query_count"]) == 2
     assert "not yet implemented" in capsys.readouterr().err
 
 

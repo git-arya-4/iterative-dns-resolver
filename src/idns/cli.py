@@ -1,6 +1,7 @@
 """Command-line entry points for the iterative DNS resolver."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -67,6 +68,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["cold_warm", "cache_hit_ratio", "query_count", "unreachable_authoritative"],
         help="Name of experiment to execute",
     )
+    exp_parser.add_argument("--domain", default="example.com", help="Domain for the cold/warm experiment")
+    exp_parser.add_argument("--record-type", default="A", type=str.upper, choices=SUPPORTED_RECORD_TYPES)
+    exp_parser.add_argument("--samples", type=int, default=5, help="Timed samples per phase (default: 5)")
+    exp_parser.add_argument("--output", type=Path, help="Write experiment JSON to this path")
 
     return parser
 
@@ -135,7 +140,24 @@ def main(args: list[str] | None = None) -> int:
             server_type(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
             return 0
         elif parsed_args.command == "experiment":
-            print("experiment mode is not yet implemented", file=sys.stderr)
+            if parsed_args.name == "cold_warm":
+                from idns.experiments import run_cold_warm
+
+                result = run_cold_warm(
+                    resolver,
+                    parsed_args.domain,
+                    parsed_args.record_type,
+                    parsed_args.samples,
+                )
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
+            print(f"experiment '{parsed_args.name}' is not yet implemented", file=sys.stderr)
             return 2
 
     except DNSError as e:
