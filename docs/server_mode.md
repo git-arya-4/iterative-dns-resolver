@@ -8,3 +8,5 @@ The server decodes incoming DNS requests, routes them through the configured
 resolver, and returns encoded responses. UDP is the default listener; pass
 `--tcp` to the CLI for DNS-over-TCP two-byte length framing. Both listeners
 support port `0` for ephemeral-port use and can be stopped with `close()`.
+
+For Windows OS-resolver integration, see [os_integration.md](os_integration.md).
