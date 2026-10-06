@@ -56,7 +56,7 @@ class RootQuery:
         servers = [
             ServerAddress(
                 ip=root["ipv4"],
-                port=53,
+                port=int(root.get("port", 53)),
                 protocol="UDP",
                 name=root.get("name"),
             )
