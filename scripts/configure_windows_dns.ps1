@@ -29,6 +29,10 @@ if ([string]::IsNullOrWhiteSpace($InterfaceAlias)) {
 
 $current = Get-DnsClientServerAddress -InterfaceAlias $InterfaceAlias -AddressFamily IPv4
 $backup = [ordered]@{ InterfaceAlias = $InterfaceAlias; ServerAddresses = @($current.ServerAddresses) }
+$backupDirectory = Split-Path -Parent $BackupPath
+if ($backupDirectory -and -not (Test-Path -LiteralPath $backupDirectory)) {
+    New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
+}
 $backup | ConvertTo-Json | Set-Content -LiteralPath $BackupPath -Encoding utf8
 Set-DnsClientServerAddress -InterfaceAlias $InterfaceAlias -ServerAddresses "127.0.0.1"
 Write-Output "Configured $InterfaceAlias to use 127.0.0.1. Backup: $BackupPath"

@@ -64,6 +64,7 @@ PYTHONPATH=src python -m idns.cli experiment unreachable_authoritative \
   --output experiments/unreachable_authoritative/results.json
 ```
 
-The report records whether resolution failed, the exception type and message,
-elapsed time, and query metadata. The experiment does not alter retry or
-timeout settings; configure the resolver/transport before running it.
+The CLI configures the resolver with the reserved TEST-NET-1 address
+`192.0.2.1`, which is intended to be unreachable, then records whether
+resolution failed, the exception type and message, elapsed time, and query
+metadata. Existing retry and timeout settings are preserved.

@@ -22,9 +22,19 @@ def run_query_count_comparison(
     *,
     dig_command: str = "dig",
     runner: Callable[..., Any] = subprocess.run,
+    clear_cache: bool = True,
 ) -> dict[str, Any]:
-    """Compare one resolver result with a local ``dig +trace`` invocation."""
+    """Compare one resolver result with a local ``dig +trace`` invocation.
+
+    The comparison is explicitly approximate: the resolver count is its
+    internal iterative query counter, while the dig count is the number of
+    ``Received`` response lines printed by an independent trace.
+    """
     record_type = record_type.upper()
+    cache_cleared = False
+    if clear_cache and hasattr(resolver, "cache") and hasattr(resolver.cache, "clear"):
+        resolver.cache.clear()
+        cache_cleared = True
     result = resolver.resolve(domain, record_type)
     resolver_count = int(getattr(result, "query_count", 0))
 
@@ -44,6 +54,9 @@ def run_query_count_comparison(
             "difference": None,
             "dig_available": False,
             "dig_error": str(error),
+            "comparison_is_approximate": True,
+            "measurement_definition": "resolver query_count vs dig +trace Received response lines",
+            "resolver_cache_cleared": cache_cleared,
         }
 
     output = f"{completed.stdout}\n{completed.stderr}"
@@ -56,4 +69,7 @@ def run_query_count_comparison(
         "difference": resolver_count - dig_count,
         "dig_available": completed.returncode == 0,
         "dig_return_code": completed.returncode,
+        "comparison_is_approximate": True,
+        "measurement_definition": "resolver query_count vs dig +trace Received response lines",
+        "resolver_cache_cleared": cache_cleared,
     }

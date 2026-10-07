@@ -3,21 +3,26 @@
 from __future__ import annotations
 
 from time import perf_counter_ns
-from typing import Any
+from typing import Any, Callable
 
 
 def run_unreachable_authoritative(
     resolver: Any,
     domain: str,
     record_type: str = "A",
+    *,
+    unreachable_ip: str = "192.0.2.1",
+    configure_resolver: Callable[[Any, str], None] | None = None,
 ) -> dict[str, Any]:
-    """Run a resolution and record failure behavior.
+    """Run a resolution against a configured unreachable endpoint.
 
-    The supplied resolver must be configured with the unreachable authoritative
-    endpoint before this function is called. No retry or timeout policy is
-    changed by the experiment.
+    ``192.0.2.1`` is from TEST-NET-1 and is reserved for documentation and
+    testing. A caller can provide ``configure_resolver`` to install it as the
+    resolver's authoritative/root target. No retry or timeout policy is changed.
     """
     started = perf_counter_ns()
+    if configure_resolver is not None:
+        configure_resolver(resolver, unreachable_ip)
     try:
         result = resolver.resolve(domain, record_type.upper())
     except Exception as error:
@@ -29,6 +34,7 @@ def run_unreachable_authoritative(
             "elapsed_ms": (perf_counter_ns() - started) / 1_000_000,
             "error_type": type(error).__name__,
             "error": str(error),
+            "unreachable_endpoint": unreachable_ip,
         }
 
     return {
@@ -40,4 +46,5 @@ def run_unreachable_authoritative(
         "query_count": int(getattr(result, "query_count", 0)),
         "rcode": getattr(result, "rcode", None),
         "is_cache_hit": bool(getattr(result, "is_cache_hit", False)),
+        "unreachable_endpoint": unreachable_ip,
     }
