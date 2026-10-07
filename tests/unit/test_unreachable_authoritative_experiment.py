@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from idns.experiments import run_unreachable_authoritative
+from idns.cache import InMemoryDNSCache
+from idns.core import CoreResolver
+from idns.experiments import (
+    configure_unreachable_authoritative,
+    run_unreachable_authoritative,
+)
 
 
 def test_unreachable_experiment_records_resolver_failure():
@@ -34,3 +39,17 @@ def test_unreachable_experiment_reports_unexpected_success():
     assert result["expected_failure"] is False
     assert result["record_type"] == "A"
     assert result["query_count"] == 2
+
+
+def test_unreachable_experiment_reaches_authority_after_root_and_tld():
+    resolver = CoreResolver(cache=InMemoryDNSCache())
+
+    result = run_unreachable_authoritative(
+        resolver,
+        "example.com",
+        configure_resolver=lambda target, _: configure_unreachable_authoritative(target),
+    )
+
+    assert result["completed"] is False
+    assert result["error_type"] == "ServerUnreachableError"
+    assert result["unreachable_endpoint"] == "192.0.2.1"

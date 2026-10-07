@@ -2,9 +2,9 @@
 
 **Owner**: Swastik + Shriyansh + Arya  
 **Subsystem Directory**: `experiments/`  
-**Status**: Cold vs warm latency implemented; remaining experiments are planned.
+**Status**: Experiments 8.1–8.4 implemented; OS integration documented.
 
-> **Note**: Task 8.1 implements the cold vs warm latency experiment. The remaining experiments are planned:
+> **Note**: The four listed experiments are implemented:
 > 1. Cold vs Warm Resolution Latency
 > 2. Cache Hit Ratio over Replayed Query Trace
 > 3. Query Count per Resolution compared against `dig +trace`
@@ -55,7 +55,7 @@ as `null`.
 
 ## Unreachable authoritative server
 
-Run this experiment with a resolver configured to use an unreachable
+Run this experiment; the CLI configures a deterministic unreachable
 authoritative endpoint:
 
 ```bash
@@ -64,7 +64,7 @@ PYTHONPATH=src python -m idns.cli experiment unreachable_authoritative \
   --output experiments/unreachable_authoritative/results.json
 ```
 
-The CLI configures the resolver with the reserved TEST-NET-1 address
-`192.0.2.1`, which is intended to be unreachable, then records whether
-resolution failed, the exception type and message, elapsed time, and query
-metadata. Existing retry and timeout settings are preserved.
+The CLI installs a deterministic Root -> TLD -> authoritative scenario. Root
+and TLD return referrals; only the authoritative query targets the reserved
+TEST-NET-1 address `192.0.2.1` and fails. The report records whether resolution
+failed, the exception type and message, elapsed time, and query metadata.

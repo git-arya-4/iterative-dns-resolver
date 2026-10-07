@@ -191,23 +191,16 @@ def main(args: list[str] | None = None) -> int:
                     print(encoded)
                 return 0
             if parsed_args.name == "unreachable_authoritative":
-                from idns.experiments import run_unreachable_authoritative
-
-                def configure_unreachable(resolver, ip):
-                    resolver.root_servers = [{"name": "unreachable-authority", "ipv4": ip}]
-                    from idns.core.cache_aware import CacheAwareResolver
-                    from idns.iterative.engine import IterativeEngine
-
-                    resolver.resolver_chain = CacheAwareResolver(
-                        resolver.cache,
-                        IterativeEngine(resolver.transport, resolver.root_servers),
-                    )
+                from idns.experiments import (
+                    configure_unreachable_authoritative,
+                    run_unreachable_authoritative,
+                )
 
                 result = run_unreachable_authoritative(
                     resolver,
                     parsed_args.domain,
                     parsed_args.record_type,
-                    configure_resolver=configure_unreachable,
+                    configure_resolver=configure_unreachable_authoritative,
                 )
                 encoded = json.dumps(result, indent=2)
                 if parsed_args.output:
