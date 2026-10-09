@@ -6,7 +6,7 @@ from time import perf_counter_ns
 from typing import Any, Callable
 
 from idns.contracts.transport import TransportResult
-from idns.errors import ServerUnreachableError
+from idns.errors import DNSTimeoutError, ServerUnreachableError
 from idns.model import ARecord, DNSHeader, DNSMessage, DNSName, NSRecord
 from idns.wire import DNSMessageEncoder
 
@@ -84,7 +84,10 @@ def run_unreachable_authoritative(
             "domain": domain,
             "record_type": record_type.upper(),
             "completed": False,
-            "expected_failure": True,
+            "expected_failure": isinstance(
+                error,
+                (ServerUnreachableError, DNSTimeoutError, TimeoutError),
+            ),
             "elapsed_ms": (perf_counter_ns() - started) / 1_000_000,
             "error_type": type(error).__name__,
             "error": str(error),

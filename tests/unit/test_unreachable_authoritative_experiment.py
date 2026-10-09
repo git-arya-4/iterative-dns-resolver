@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from idns.cache import InMemoryDNSCache
 from idns.core import CoreResolver
+from idns.errors import DNSTimeoutError
 from idns.experiments import (
     configure_unreachable_authoritative,
     run_unreachable_authoritative,
@@ -28,6 +29,18 @@ def test_unreachable_experiment_records_resolver_failure():
     assert configured == ["192.0.2.1"]
 
 
+def test_unreachable_experiment_classifies_project_timeout_as_expected():
+    class FailingResolver:
+        def resolve(self, domain, record_type):
+            raise DNSTimeoutError("192.0.2.1:53", 2.0)
+
+    result = run_unreachable_authoritative(FailingResolver(), "example.com")
+
+    assert result["completed"] is False
+    assert result["expected_failure"] is True
+    assert result["error_type"] == "DNSTimeoutError"
+
+
 def test_unreachable_experiment_reports_unexpected_success():
     class SuccessfulResolver:
         def resolve(self, domain, record_type):
@@ -39,6 +52,19 @@ def test_unreachable_experiment_reports_unexpected_success():
     assert result["expected_failure"] is False
     assert result["record_type"] == "A"
     assert result["query_count"] == 2
+
+
+def test_unreachable_experiment_does_not_misclassify_unexpected_errors():
+    class BrokenResolver:
+        def resolve(self, domain, record_type):
+            raise ValueError("invalid resolver state")
+
+    result = run_unreachable_authoritative(BrokenResolver(), "example.com")
+
+    assert result["completed"] is False
+    assert result["expected_failure"] is False
+    assert result["error_type"] == "ValueError"
+    assert result["error"] == "invalid resolver state"
 
 
 def test_unreachable_experiment_reaches_authority_after_root_and_tld():
