@@ -30,6 +30,7 @@ MANIFEST
 .pytest_cache/
 .coverage
 htmlcov/
+graphify-out/
 
 # Environments
 .venv
