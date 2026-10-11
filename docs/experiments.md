@@ -64,7 +64,24 @@ PYTHONPATH=src python -m idns.cli experiment unreachable_authoritative \
   --output experiments/unreachable_authoritative/results.json
 ```
 
-The CLI installs a deterministic Root -> TLD -> authoritative scenario. Root
-and TLD return referrals; only the authoritative query targets the reserved
-TEST-NET-1 address `192.0.2.1` and fails. The report records whether resolution
-failed, the exception type and message, elapsed time, and query metadata.
+The CLI installs a deterministic Root -> TLD -> authoritative scenario without
+using the public network. Root and TLD return controlled referrals. The first
+authoritative candidate is mapped to an unbound loopback UDP endpoint on an
+ephemeral port, while the second candidate is mapped to a live loopback UDP
+responder on another ephemeral port. Authoritative packets still go through the production
+`UDPTransport`, so its timeout and retry policy is exercised before the
+resolver fails over to Authority B.
+
+The report includes the actual candidate endpoints attempted, UDP attempts and
+retries per candidate, whether failover occurred, logical `query_count`, the
+separate `query_attempt_count`, final answer/status, error details when all
+candidates fail, and `elapsed_ns`/`elapsed_ms` measured from
+`perf_counter_ns`. Local sockets and the responder thread are cleaned up after
+each run, and the resolver's pre-experiment state is restored. A caller may
+pass an explicit `TransportConfig`; otherwise the experiment uses a small
+experiment-local timeout/retry configuration. `query_count` remains the
+resolver's logical successful-exchange count. `query_attempt_count` is the
+experiment total of the two controlled root/TLD exchanges plus every real
+authoritative UDP send, including retries; `control_query_attempt_count` is
+reported separately so these synthetic exchanges are not mistaken for socket
+attempts.

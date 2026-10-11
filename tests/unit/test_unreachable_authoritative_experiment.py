@@ -79,9 +79,22 @@ def test_unreachable_experiment_reaches_authority_after_root_and_tld():
         configure_resolver=lambda target, _: configure_unreachable_authoritative(target),
     )
 
-    assert result["completed"] is False
-    assert result["error_type"] == "ServerUnreachableError"
-    assert result["unreachable_endpoint"] == "192.0.2.1"
+    assert result["completed"] is True
+    assert result["final_success"] is True
+    assert result["error_type"] is None
+    assert result["query_count"] == 3
+    assert result["query_attempt_count"] == 5
+    assert result["failover_occurred"] is True
+    assert result["candidate_names_attempted"] == [
+        "authority-a.example.com",
+        "authority-b.example.com",
+    ]
+    assert len(result["candidate_endpoints_attempted"]) == 2
+    assert result["udp_attempts"]["authority-a.example.com"] == 2
+    assert result["retries_per_candidate"]["authority-a.example.com"] == 1
+    assert result["udp_attempts"]["authority-b.example.com"] == 1
+    assert result["final_answers"][0]["address"] == "203.0.113.42"
+    assert resolver.resolver_chain is None
 
 
 def test_unreachable_experiment_builds_referrals_for_non_example_domains():
@@ -93,12 +106,15 @@ def test_unreachable_experiment_builds_referrals_for_non_example_domains():
         configure_resolver=configure_unreachable_authoritative,
     )
 
-    assert result["completed"] is False
-    assert result["error_type"] == "ServerUnreachableError"
-    assert result["query_count"] == 2
-    assert result["queried_servers"] == ["192.0.2.1"]
+    assert result["completed"] is True
+    assert result["error_type"] is None
+    assert result["query_count"] == 3
+    assert result["queried_servers"] == ["192.0.2.1", "192.0.2.4"]
     assert any(
-        "test-authority.acme.org" in event for event in result["trace_log"]
+        "authority-a.acme.org" in event for event in result["trace_log"]
+    )
+    assert any(
+        "authority-b.acme.org" in event for event in result["trace_log"]
     )
 
 
@@ -129,8 +145,8 @@ def test_unreachable_experiment_bypasses_cache_without_mutating_it():
         configure_resolver=configure_unreachable_authoritative,
     )
 
-    assert result["completed"] is False
-    assert result["error_type"] == "ServerUnreachableError"
+    assert result["completed"] is True
+    assert result["final_answers"][0]["address"] == "203.0.113.42"
     assert cache.get(key).records == [cached_record]
     assert resolver.resolver_chain is original_chain
 
@@ -170,3 +186,64 @@ def test_unreachable_experiment_includes_failure_query_metadata():
     assert result["query_count"] == 4
     assert result["queried_servers"] == ["192.0.2.3", "192.0.2.1"]
     assert result["trace_log"] == ["root query", "authority query"]
+
+
+def test_unreachable_experiment_uses_real_udp_retry_count_with_explicit_config():
+    resolver = CoreResolver(cache=InMemoryDNSCache())
+    transport_config = TransportConfig(
+        timeout_seconds=0.005,
+        max_retries=2,
+        enable_tcp_fallback=False,
+    )
+
+    result = run_unreachable_authoritative(
+        resolver,
+        "retry.example.com",
+        transport_config=transport_config,
+    )
+
+    assert result["completed"] is True
+    assert result["candidate_names_attempted"] == [
+        "authority-a.example.com",
+        "authority-b.example.com",
+    ]
+    assert result["udp_attempts"]["authority-a.example.com"] == 3
+    assert result["retries_per_candidate"]["authority-a.example.com"] == 2
+    assert result["udp_attempts"]["authority-b.example.com"] == 1
+    assert result["query_attempt_count"] == 6
+
+
+def test_unreachable_experiment_reports_candidate_exhaustion_metadata():
+    resolver = CoreResolver(cache=InMemoryDNSCache())
+    transport_config = TransportConfig(
+        timeout_seconds=0.005,
+        max_retries=1,
+        enable_tcp_fallback=False,
+    )
+
+    result = run_unreachable_authoritative(
+        resolver,
+        "exhausted.example.com",
+        transport_config=transport_config,
+        authority_b_available=False,
+    )
+
+    assert result["completed"] is False
+    assert result["final_failure"] is True
+    assert result["candidate_exhausted"] is True
+    assert result["failover_occurred"] is True
+    assert result["error_type"] == "DNSTimeoutError"
+    assert result["candidate_names_attempted"] == [
+        "authority-a.example.com",
+        "authority-b.example.com",
+    ]
+    assert result["udp_attempts"] == {
+        "authority-a.example.com": 2,
+        "authority-b.example.com": 2,
+    }
+    assert result["retries_per_candidate"] == {
+        "authority-a.example.com": 1,
+        "authority-b.example.com": 1,
+    }
+    assert result["query_count"] == 2
+    assert result["query_attempt_count"] == 6

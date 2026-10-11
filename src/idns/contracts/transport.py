@@ -41,6 +41,7 @@ class TransportResult:
     rtt_ms: float
     tc_bit_set: bool = False
     is_tcp: bool = False
+    attempt_count: int = 1
 
 
 @runtime_checkable
