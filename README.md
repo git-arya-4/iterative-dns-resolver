@@ -103,4 +103,4 @@ idns-resolver server --tcp --port 5353
 
 ## 5. Current Project Stage
 
-> **Current state**: Core iterative resolution, caching, CNAME processing, transport, wire handling, CLI resolution, and local UDP/TCP server modes are implemented and tested. The experiment harness remains future work and reports an explicit unavailable status.
+> **Current state**: Core iterative resolution, caching, CNAME processing, transport, wire handling, CLI resolution, local UDP/TCP server modes, and the cold/warm, cache-hit, query-count, and unreachable-authority experiments are implemented and tested. Windows OS-resolver setup is documented with an explicit backup/restore script.

@@ -33,11 +33,18 @@ class TransportError(DNSError):
 
 class DNSTimeoutError(TransportError):
     """Raised when a DNS query times out across retries."""
-    def __init__(self, server: str, timeout: float, message: Optional[str] = None):
+    def __init__(
+        self,
+        server: str,
+        timeout: float,
+        message: Optional[str] = None,
+        attempt_count: int = 1,
+    ):
         msg = message or f"DNS query to server '{server}' timed out after {timeout} seconds."
         super().__init__(msg)
         self.server = server
         self.timeout = timeout
+        self.attempt_count = attempt_count
 
 
 class ServerUnreachableError(TransportError):
