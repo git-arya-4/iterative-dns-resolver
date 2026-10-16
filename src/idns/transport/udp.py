@@ -33,6 +33,7 @@ class UDPTransport(DNSTransportProtocol):
 
         expected_transaction_id = self._get_transaction_id(query_bytes)
         last_error: Exception | None = None
+        attempt_count = 0
 
         # max_retries means retries after the initial attempt.
         total_attempts = 1 + config.max_retries
@@ -41,12 +42,10 @@ class UDPTransport(DNSTransportProtocol):
             start_time = time.perf_counter()
 
             try:
-                with socket.socket(
-                    socket.AF_INET,
-                    socket.SOCK_DGRAM,
-                ) as sock:
+                with self._create_socket() as sock:
                     sock.settimeout(config.timeout_seconds)
 
+                    attempt_count += 1
                     sock.sendto(
                         query_bytes,
                         (server.ip, server.port),
@@ -108,6 +107,7 @@ class UDPTransport(DNSTransportProtocol):
                     server_used=server,
                     rtt_ms=rtt_ms,
                     tc_bit_set=tc_bit_set,
+                    attempt_count=attempt_count,
                 )
 
                 if tc_bit_set and config.enable_tcp_fallback:
@@ -124,6 +124,12 @@ class UDPTransport(DNSTransportProtocol):
             except socket.timeout as exc:
                 last_error = exc
 
+            except (ConnectionRefusedError, ConnectionResetError) as exc:
+                # Some platforms report a closed UDP port as an asynchronous
+                # connection error rather than a recvfrom timeout. Treat it as
+                # a retryable no-response so max_retries remains authoritative.
+                last_error = exc
+
             except OSError as exc:
                 raise ServerUnreachableError(
                     f"DNS server '{server.ip}:{server.port}' "
@@ -133,7 +139,13 @@ class UDPTransport(DNSTransportProtocol):
         raise DNSTimeoutError(
             server=f"{server.ip}:{server.port}",
             timeout=config.timeout_seconds,
+            attempt_count=attempt_count,
         ) from last_error
+
+    @staticmethod
+    def _create_socket() -> socket.socket:
+        """Create a UDP socket; experiments may observe real socket operations."""
+        return socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
     def send_query_with_fallback(
         self,

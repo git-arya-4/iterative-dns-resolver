@@ -1,3 +1,4 @@
+import socket
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,6 +54,27 @@ def test_send_query_returns_response():
     assert result.raw_response == make_response()
     assert result.server_used == SERVER
     assert result.tc_bit_set is False
+    assert result.attempt_count == 1
+
+
+def test_send_query_reports_attempt_count_after_retry_then_success():
+    fake_socket = MagicMock()
+    fake_socket.recvfrom.side_effect = [
+        socket.timeout(),
+        (make_response(), ("192.0.2.1", 53)),
+    ]
+
+    with patch("idns.transport.udp.socket.socket") as socket_mock:
+        socket_mock.return_value.__enter__.return_value = fake_socket
+
+        result = UDPTransport().send_query(
+            SERVER,
+            QUERY,
+            TransportConfig(max_retries=1),
+        )
+
+    assert result.attempt_count == 2
+    assert fake_socket.sendto.call_count == 2
 
 
 def test_send_query_falls_back_to_tcp_when_tc_is_set():
@@ -164,13 +186,32 @@ def test_send_query_times_out():
     with patch("idns.transport.udp.socket.socket") as socket_mock:
         socket_mock.return_value.__enter__.return_value = fake_socket
 
-        with pytest.raises(DNSTimeoutError):
+        with pytest.raises(DNSTimeoutError) as error_info:
             UDPTransport().send_query(
                 SERVER,
                 QUERY,
                 TransportConfig(max_retries=0),
             )
 
+    assert error_info.value.attempt_count == 1
+
+
+def test_send_query_retries_closed_local_udp_port():
+    probe_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    probe_socket.bind(("127.0.0.1", 0))
+    server = ServerAddress("127.0.0.1", probe_socket.getsockname()[1])
+    probe_socket.close()
+
+    config = TransportConfig(
+        timeout_seconds=0.02,
+        max_retries=2,
+        enable_tcp_fallback=False,
+    )
+
+    with pytest.raises(DNSTimeoutError) as error_info:
+        UDPTransport().send_query(server, QUERY, config)
+
+    assert error_info.value.attempt_count == 3
 
 def test_send_query_uses_configured_timeout():
     fake_socket = MagicMock()

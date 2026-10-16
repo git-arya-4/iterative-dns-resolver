@@ -53,21 +53,6 @@ def test_cli_server_starts_without_entering_real_loop(monkeypatch, capsys):
     assert started[0][1:] == ("127.0.0.1", 5353)
 
 
-def test_cli_experiment_delegates_to_experiment_runner(monkeypatch, capsys, tmp_path):
-    hints = tmp_path / "root_hints.json"
-    hints.write_text('{"root_servers": [{"name": "root", "ipv4": "198.41.0.4"}]}')
-
-    class Report:
-        def render(self):
-            return "Experiment: cold_warm"
-
-    calls = []
-    monkeypatch.setattr("idns.cli.run_experiment", lambda name, path, **kwargs: (calls.append((name, path, kwargs)) or Report()))
-    assert main(["--config", str(hints), "experiment", "cold_warm"]) == 0
-    assert calls[0][0] == "cold_warm"
-    assert "Experiment: cold_warm" in capsys.readouterr().out
-
-
 def test_resolve_parser_accepts_positional_case_insensitive_type():
     args = build_parser().parse_args(["resolve", "example.com", "aaaa"])
     assert args.record_type == "AAAA"

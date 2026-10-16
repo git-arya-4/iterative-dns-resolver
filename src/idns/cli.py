@@ -1,6 +1,7 @@
 """Command-line entry points for the iterative DNS resolver."""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -10,7 +11,6 @@ from idns.core import CoreResolver, SUPPORTED_RECORD_TYPES
 from idns.errors import ConfigError, DNSError
 from idns.server import TCPDNSServer, UDPDNSServer
 from idns.transport.udp import UDPTransport
-from idns.experiments import ExperimentError, run_experiment
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -68,10 +68,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["cold_warm", "cache_hit_ratio", "query_count", "unreachable_authoritative"],
         help="Name of experiment to execute",
     )
-    exp_parser.add_argument("--domain", default="example.com")
-    exp_parser.add_argument("--record-type", default="A", type=str.upper, choices=sorted(SUPPORTED_RECORD_TYPES))
-    exp_parser.add_argument("--repetitions", default=5, type=int)
-    exp_parser.add_argument("--csv", dest="csv_path", default=None, help="Optional CSV output path")
+    exp_parser.add_argument("--domain", default="example.com", help="Domain for the cold/warm experiment")
+    exp_parser.add_argument("--record-type", default="A", type=str.upper, choices=SUPPORTED_RECORD_TYPES)
+    exp_parser.add_argument("--samples", type=int, default=5, help="Timed samples per phase (default: 5)")
+    exp_parser.add_argument("--output", type=Path, help="Write experiment JSON to this path")
+    exp_parser.add_argument("--trace-file", type=Path, help="JSON query trace for cache_hit_ratio")
+    exp_parser.add_argument("--dig-command", default="dig", help="dig executable for query_count")
 
     return parser
 
@@ -122,20 +124,6 @@ def main(args: list[str] | None = None) -> int:
         if not hints_path.is_file():
             raise ConfigError(f"Root hints file not found at: {hints_path}")
 
-        if parsed_args.command == "experiment":
-            experiment_kwargs = {
-                "domain": parsed_args.domain,
-                "record_type": parsed_args.record_type,
-            }
-            if parsed_args.name == "cache_hit_ratio":
-                experiment_kwargs["repetitions"] = parsed_args.repetitions
-            report = run_experiment(parsed_args.name, hints_path, **experiment_kwargs)
-            print(report.render())
-            if parsed_args.csv_path:
-                report.write_csv(parsed_args.csv_path)
-                print(f"CSV: {parsed_args.csv_path}")
-            return 0
-
         resolver = CoreResolver(
             root_hints_path=hints_path,
             transport=UDPTransport(),
@@ -153,7 +141,79 @@ def main(args: list[str] | None = None) -> int:
             server_type = TCPDNSServer if parsed_args.tcp else UDPDNSServer
             server_type(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
             return 0
-    except (DNSError, ExperimentError) as e:
+        elif parsed_args.command == "experiment":
+            if parsed_args.name == "cold_warm":
+                from idns.experiments import run_cold_warm
+
+                result = run_cold_warm(
+                    resolver,
+                    parsed_args.domain,
+                    parsed_args.record_type,
+                    parsed_args.samples,
+                )
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
+            if parsed_args.name == "cache_hit_ratio":
+                from idns.experiments import load_trace, run_cache_hit_ratio
+
+                if parsed_args.trace_file is None:
+                    raise ValueError("--trace-file is required for cache_hit_ratio")
+                result = run_cache_hit_ratio(resolver, load_trace(parsed_args.trace_file))
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
+            if parsed_args.name == "query_count":
+                from idns.experiments import run_query_count_comparison
+
+                result = run_query_count_comparison(
+                    resolver,
+                    parsed_args.domain,
+                    parsed_args.record_type,
+                    dig_command=parsed_args.dig_command,
+                )
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
+            if parsed_args.name == "unreachable_authoritative":
+                from idns.experiments import (
+                    configure_unreachable_authoritative,
+                    run_unreachable_authoritative,
+                )
+
+                result = run_unreachable_authoritative(
+                    resolver,
+                    parsed_args.domain,
+                    parsed_args.record_type,
+                    configure_resolver=configure_unreachable_authoritative,
+                )
+                encoded = json.dumps(result, indent=2)
+                if parsed_args.output:
+                    parsed_args.output.parent.mkdir(parents=True, exist_ok=True)
+                    parsed_args.output.write_text(encoded + "\n", encoding="utf-8")
+                    print(f"Experiment results written to {parsed_args.output}")
+                else:
+                    print(encoded)
+                return 0
+            print(f"experiment '{parsed_args.name}' is not yet implemented", file=sys.stderr)
+            return 2
+
+    except DNSError as e:
         print(f"[IDNS ERROR] {e.message}", file=sys.stderr)
         return 1
     except Exception as e:
