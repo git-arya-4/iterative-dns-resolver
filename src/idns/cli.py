@@ -10,6 +10,7 @@ from idns.core import CoreResolver, SUPPORTED_RECORD_TYPES
 from idns.errors import ConfigError, DNSError
 from idns.server import TCPDNSServer, UDPDNSServer
 from idns.transport.udp import UDPTransport
+from idns.experiments import ExperimentError, run_experiment
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -67,6 +68,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["cold_warm", "cache_hit_ratio", "query_count", "unreachable_authoritative"],
         help="Name of experiment to execute",
     )
+    exp_parser.add_argument("--domain", default="example.com")
+    exp_parser.add_argument("--record-type", default="A", type=str.upper, choices=sorted(SUPPORTED_RECORD_TYPES))
+    exp_parser.add_argument("--repetitions", default=5, type=int)
+    exp_parser.add_argument("--csv", dest="csv_path", default=None, help="Optional CSV output path")
 
     return parser
 
@@ -117,6 +122,20 @@ def main(args: list[str] | None = None) -> int:
         if not hints_path.is_file():
             raise ConfigError(f"Root hints file not found at: {hints_path}")
 
+        if parsed_args.command == "experiment":
+            experiment_kwargs = {
+                "domain": parsed_args.domain,
+                "record_type": parsed_args.record_type,
+            }
+            if parsed_args.name == "cache_hit_ratio":
+                experiment_kwargs["repetitions"] = parsed_args.repetitions
+            report = run_experiment(parsed_args.name, hints_path, **experiment_kwargs)
+            print(report.render())
+            if parsed_args.csv_path:
+                report.write_csv(parsed_args.csv_path)
+                print(f"CSV: {parsed_args.csv_path}")
+            return 0
+
         resolver = CoreResolver(
             root_hints_path=hints_path,
             transport=UDPTransport(),
@@ -134,11 +153,7 @@ def main(args: list[str] | None = None) -> int:
             server_type = TCPDNSServer if parsed_args.tcp else UDPDNSServer
             server_type(resolver, host=parsed_args.host, port=parsed_args.port).serve_forever()
             return 0
-        elif parsed_args.command == "experiment":
-            print("experiment mode is not yet implemented", file=sys.stderr)
-            return 2
-
-    except DNSError as e:
+    except (DNSError, ExperimentError) as e:
         print(f"[IDNS ERROR] {e.message}", file=sys.stderr)
         return 1
     except Exception as e:
