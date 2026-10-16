@@ -27,6 +27,8 @@ from .records import (
     MXRecord,
     TXTRecord,
     SOARecord,
+    EDNSOption,
+    OPTRecord,
 )
 
 from .message import (
@@ -51,6 +53,8 @@ __all__ = [
     "MXRecord",
     "TXTRecord",
     "SOARecord",
+    "EDNSOption",
+    "OPTRecord",
 
     "DNSMessage",
     "DNSRecord",

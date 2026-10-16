@@ -1,7 +1,7 @@
 import socket
 
 from idns.contracts.resolver import ResolverResult
-from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion
+from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion, EDNSOption, OPTRecord
 from idns.server import DNSRequestHandler, DNSResponseBuilder, TCPDNSServer
 from idns.observability import DNSMetrics, ThreadSafeDNSMetrics
 from idns.wire import DNSMessageEncoder
@@ -18,6 +18,16 @@ def query_packet():
         DNSMessage(
             header=DNSHeader(transaction_id=0x1234, rd=1),
             questions=[DNSQuestion(DNSName("example.com"), "A")],
+        )
+    )
+
+
+def edns_query_packet():
+    return DNSMessageEncoder.encode(
+        DNSMessage(
+            header=DNSHeader(transaction_id=0x4321, rd=1),
+            questions=[DNSQuestion(DNSName("example.com"), "A")],
+            additionals=[OPTRecord(DNSName("."), 1232, flags=0x8000, options=(EDNSOption(65001, b"x"),))],
         )
     )
 
@@ -44,6 +54,16 @@ def test_handler_resolves_query_and_returns_wire_response():
     assert response.header.rcode == 0
     assert metrics.requests == 1
     assert metrics.successes == 1
+
+
+def test_handler_accepts_edns_and_returns_question_and_opt():
+    handler = DNSRequestHandler(FakeResolver())
+    response = DNSMessageDecoder.decode(handler.handle(edns_query_packet())[0])
+    assert response.header.transaction_id == 0x4321
+    assert response.questions[0].qname == DNSName("example.com")
+    assert len(response.additionals) == 1
+    assert response.additionals[0].udp_payload_size == 1232
+    assert response.additionals[0].dnssec_ok
 
 
 def test_handler_returns_formerr_for_malformed_packet():

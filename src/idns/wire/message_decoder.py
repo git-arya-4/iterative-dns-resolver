@@ -36,6 +36,8 @@ from idns.model import (
     MXRecord,
     TXTRecord,
     SOARecord,
+    EDNSOption,
+    OPTRecord,
 )
 
 from idns.wire.cursor import ByteCursor, DNSBoundsError
@@ -81,6 +83,7 @@ TYPE_SOA = 6
 TYPE_MX = 15
 TYPE_TXT = 16
 TYPE_AAAA = 28
+TYPE_OPT = 41
 
 
 TYPE_NAMES = {
@@ -184,7 +187,11 @@ class DNSMessageDecoder:
             additionals = []
 
             for _ in range(header.arcount):
-                record = cls._decode_record(cursor, data)
+                record = cls._decode_record(cursor, data, allow_opt=True)
+                if isinstance(record, OPTRecord) and any(
+                    isinstance(existing, OPTRecord) for existing in additionals
+                ):
+                    raise DNSMessageDecodeError("duplicate OPT record")
                 additionals.append(record)
 
             # ------------------------------------------------
@@ -216,6 +223,7 @@ class DNSMessageDecoder:
         cls,
         cursor: ByteCursor,
         packet: bytes,
+        allow_opt: bool = False,
     ):
         """
         Decode one DNS Resource Record.
@@ -263,7 +271,10 @@ class DNSMessageDecoder:
                 "truncated resource record class"
             ) from exc
 
-        if record_class != CLASS_IN:
+        if record_type == TYPE_OPT and not allow_opt:
+            raise DNSMessageDecodeError("OPT record is only valid in the additional section")
+
+        if record_type != TYPE_OPT and record_class != CLASS_IN:
             raise DNSMessageDecodeError(
                 f"unsupported DNS class: {record_class}"
             )
@@ -300,6 +311,33 @@ class DNSMessageDecoder:
             raise DNSMessageDecodeError(
                 "RDATA extends beyond DNS packet"
             )
+
+        if record_type == TYPE_OPT:
+            if name != DNSName("."):
+                raise DNSMessageDecodeError("OPT owner name must be the root name")
+            try:
+                end = rdata_start + rdlength
+                options = []
+                while cursor.position < end:
+                    if end - cursor.position < 4:
+                        raise DNSMessageDecodeError("truncated EDNS option header")
+                    code = cursor.read_u16()
+                    option_length = cursor.read_u16()
+                    if end - cursor.position < option_length:
+                        raise DNSMessageDecodeError("EDNS option extends beyond OPT RDATA")
+                    options.append(EDNSOption(code, cursor.read_bytes(option_length)))
+                return OPTRecord(
+                    name=name,
+                    udp_payload_size=record_class,
+                    version=(ttl >> 16) & 0xFF,
+                    flags=ttl & 0xFFFF,
+                    options=tuple(options),
+                    extended_rcode=(ttl >> 24) & 0xFF,
+                )
+            except DNSBoundsError as exc:
+                raise DNSMessageDecodeError("truncated OPT record") from exc
+            except ValueError as exc:
+                raise DNSMessageDecodeError("invalid OPT record") from exc
 
         # ----------------------------------------------------
         # RDATA DISPATCH

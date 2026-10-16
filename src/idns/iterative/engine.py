@@ -5,7 +5,7 @@ Top-level iterative DNS resolution engine.
 from typing import Optional
 from idns.contracts.resolver import DNSResolverProtocol, ResolutionContext, ResolverResult
 from idns.contracts.transport import DNSTransportProtocol, TransportConfig, ServerAddress
-from idns.model import DNSName, DNSMessage, NSRecord
+from idns.model import DNSName, DNSMessage, NSRecord, OPTRecord
 from idns.iterative.root_query import RootQuery
 from idns.iterative.tld_query import TLDQuery
 from idns.iterative.authoritative_query import AuthoritativeQuery
@@ -201,7 +201,10 @@ class IterativeEngine(DNSResolverProtocol):
             record_type=record_type,
             answers=response.answers,
             authoritative_servers=response.authorities,
-            additional_records=response.additionals,
+            additional_records=[
+                record for record in response.additionals
+                if not isinstance(record, OPTRecord)
+            ],
             rcode=response.header.rcode,
             is_nxdomain=is_nxdomain,
             is_cache_hit=False,

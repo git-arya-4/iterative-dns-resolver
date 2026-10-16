@@ -12,6 +12,9 @@ import pytest
 from idns.model import (
     DNSHeader,
     DNSMessage,
+    DNSName,
+    EDNSOption,
+    OPTRecord,
 )
 
 from idns.wire.message_decoder import (
@@ -77,6 +80,31 @@ def test_decode_empty_dns_message():
     assert len(message.answers) == 0
     assert len(message.authorities) == 0
     assert len(message.additionals) == 0
+
+
+def test_decode_edns_opt_query_and_options():
+    question = b"\x07example\x03com\x00" + struct.pack("!HH", 1, 1)
+    options = struct.pack("!HH2s", 65001, 2, b"ok")
+    opt = b"\x00" + struct.pack("!HHIH", 41, 1232, 0x00008000, len(options)) + options
+    message = DNSMessageDecoder.decode(make_header(qdcount=1, arcount=1) + question + opt)
+
+    record = message.additionals[0]
+    assert isinstance(record, OPTRecord)
+    assert record.name == DNSName(".")
+    assert record.udp_payload_size == 1232
+    assert record.version == 0
+    assert record.dnssec_ok
+    assert record.options == (EDNSOption(65001, b"ok"),)
+
+
+def test_decode_rejects_duplicate_opt_and_invalid_option_length():
+    opt = b"\x00" + struct.pack("!HHIH", 41, 1232, 0, 4) + struct.pack("!HH", 1, 3)
+    with pytest.raises(DNSMessageDecodeError):
+        DNSMessageDecoder.decode(make_header(arcount=1) + opt)
+
+    valid = b"\x00" + struct.pack("!HHIH", 41, 1232, 0, 0)
+    with pytest.raises(DNSMessageDecodeError):
+        DNSMessageDecoder.decode(make_header(arcount=2) + valid + valid)
 
 
 # ============================================================

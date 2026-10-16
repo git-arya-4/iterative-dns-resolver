@@ -1,5 +1,5 @@
 from idns.contracts.resolver import ResolverResult
-from idns.model import DNSHeader, DNSMessage
+from idns.model import DNSHeader, DNSMessage, DNSName, OPTRecord
 
 
 class DNSResponseBuilder:
@@ -14,12 +14,30 @@ class DNSResponseBuilder:
             ra=1,
             rcode=result.rcode,
         )
+        request_opt = next(
+            (record for record in request.additionals if isinstance(record, OPTRecord)),
+            None,
+        )
+        response_additionals = [
+            record for record in result.additional_records
+            if not isinstance(record, OPTRecord)
+        ]
+        # This resolver implements EDNS version 0 only.  Echo a deliberately
+        # constructed OPT response and retain only the DO flag we understand.
+        if request_opt is not None and request_opt.version == 0:
+            response_additionals.append(
+                OPTRecord(
+                    name=DNSName("."),
+                    udp_payload_size=request_opt.udp_payload_size,
+                    flags=request_opt.flags & 0x8000,
+                )
+            )
         response = DNSMessage(
             header=header,
             questions=list(request.questions),
             answers=list(result.answers),
             authorities=list(result.authoritative_servers),
-            additionals=list(result.additional_records),
+            additionals=response_additionals,
         )
         response.update_counts()
         return response

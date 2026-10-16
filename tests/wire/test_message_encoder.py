@@ -17,6 +17,8 @@ from idns.model import (
     MXRecord,
     TXTRecord,
     SOARecord,
+    EDNSOption,
+    OPTRecord,
 )
 
 from idns.wire.message_encoder import (
@@ -72,6 +74,22 @@ def test_encode_empty_message():
         b"\x00\x00"
         b"\x00\x00"
     )
+
+
+def test_encode_decode_opt_round_trip():
+    opt = OPTRecord(
+        name=DNSName("."),
+        udp_payload_size=4096,
+        version=0,
+        flags=0x8000,
+        extended_rcode=1,
+        options=(EDNSOption(10, b"abc"),),
+    )
+    message = DNSMessage(header=make_header(), additionals=[opt])
+    decoded = __import__("idns.wire.message_decoder", fromlist=["DNSMessageDecoder"]).DNSMessageDecoder.decode(
+        DNSMessageEncoder.encode(message)
+    )
+    assert decoded.additionals == [opt]
 
 
 # ============================================================

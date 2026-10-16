@@ -12,6 +12,7 @@ from .records import (
     MXRecord,
     TXTRecord,
     SOARecord,
+    OPTRecord,
 )
 
 
@@ -23,6 +24,7 @@ DNSRecord = Union[
     MXRecord,
     TXTRecord,
     SOARecord,
+    OPTRecord,
 ]
 
 
