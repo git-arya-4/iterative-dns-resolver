@@ -23,6 +23,7 @@ import struct
 
 from idns.model import (
     DNSMessage,
+    DNSName,
     DNSQuestion,
     ARecord,
     AAAARecord,
@@ -31,6 +32,7 @@ from idns.model import (
     MXRecord,
     TXTRecord,
     SOARecord,
+    OPTRecord,
 )
 
 from idns.wire.header_codec import DNSHeaderCodec
@@ -75,6 +77,7 @@ TYPE_SOA = 6
 TYPE_MX = 15
 TYPE_TXT = 16
 TYPE_AAAA = 28
+TYPE_OPT = 41
 
 
 # ============================================================
@@ -554,6 +557,9 @@ class DNSMessageEncoder:
                 current_offset,
             )
 
+        if isinstance(record, OPTRecord):
+            return cls._encode_opt_record(record, encoder, current_offset)
+
         raise DNSUnsupportedRecordTypeError(
             f"unsupported record type: "
             f"{type(record).__name__}"
@@ -804,6 +810,34 @@ class DNSMessageEncoder:
             record_type=TYPE_SOA,
             ttl=record.ttl,
             rdata=rdata,
+        )
+
+    @classmethod
+    def _encode_opt_record(
+        cls,
+        record: OPTRecord,
+        encoder: DNSCompressionEncoder,
+        current_offset: int,
+    ) -> bytes:
+        if record.name != DNSName("."):
+            raise DNSMessageEncodeError("OPT owner name must be the root name")
+        option_data = bytearray()
+        for option in record.options:
+            option_data.extend(struct.pack("!HH", option.code, len(option.data)))
+            option_data.extend(option.data)
+        if len(option_data) > 0xFFFF:
+            raise DNSMessageEncodeError("OPT RDATA is too large")
+        ttl = (record.extended_rcode << 24) | (record.version << 16) | record.flags
+        return (
+            b"\x00"
+            + struct.pack(
+                "!HHIH",
+                TYPE_OPT,
+                record.udp_payload_size,
+                ttl,
+                len(option_data),
+            )
+            + bytes(option_data)
         )
 
     # ========================================================
