@@ -29,6 +29,15 @@ class InMemoryDNSCache(DNSCacheProtocol):
         self._clock = clock
         self._entries: dict[CacheKey, CacheEntry] = {}
         self._stats = CacheStats()
+        self._prefetch_callback: Callable[[CacheKey, CacheEntry], None] | None = None
+        self._prefetching: set[CacheKey] = set()
+
+    def set_prefetch_callback(
+        self,
+        callback: Callable[[CacheKey, CacheEntry], None] | None,
+    ) -> None:
+        """Install a callback used to refresh entries near expiration."""
+        self._prefetch_callback = callback
 
     def get(
         self,
@@ -56,6 +65,22 @@ class InMemoryDNSCache(DNSCacheProtocol):
             self._stats.evictions += 1
             self._stats.size = len(self._entries)
             return None
+
+        if (
+            self._config.prefetch_enabled
+            and self._prefetch_callback is not None
+            and entry.remaining_ttl(now) <= max(0, self._config.prefetch_threshold_seconds)
+            and entry_key not in self._prefetching
+        ):
+            self._prefetching.add(entry_key)
+            try:
+                self._prefetch_callback(entry_key, entry)
+            except Exception:
+                # Refresh is an optimisation. A temporary upstream failure
+                # must not turn a still-valid cached answer into a failure.
+                pass
+            finally:
+                self._prefetching.discard(entry_key)
 
         self._stats.hits += 1
         return entry
@@ -122,10 +147,16 @@ class InMemoryDNSCache(DNSCacheProtocol):
         if not self._config.rfc2308_enabled:
             return
 
-        effective_ttl = (
-            compute_rfc2308_ttl(soa_record, self._config.negative_ttl_seconds)
-            if ttl_seconds is None
-            else max(0, ttl_seconds)
+        policy_ttl = compute_rfc2308_ttl(
+            soa_record,
+            self._config.negative_ttl_seconds,
+        )
+        # The configured negative TTL is an upper bound even when a caller
+        # supplies an explicit TTL.  When an SOA is present its TTL and
+        # MINIMUM remain upper bounds as required by RFC 2308.
+        effective_ttl = policy_ttl if ttl_seconds is None else min(
+            policy_ttl,
+            max(0, int(ttl_seconds)),
         )
         storage_key = self._nxdomain_key(key) if is_nxdomain else key
         entry = CacheEntry.create_negative(

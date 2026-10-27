@@ -30,6 +30,10 @@ class TransportConfig:
     max_retries: int = 3
     enable_tcp_fallback: bool = True
     buffer_size: int = 512  # Standard RFC 1035 UDP limit
+    edns_enabled: bool = False
+    edns_udp_payload_size: int = 1232
+    edns_dnssec_ok: bool = False
+    edns_options: tuple[object, ...] = ()
 
 
 @dataclass

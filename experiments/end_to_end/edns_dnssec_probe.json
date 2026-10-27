@@ -1,0 +1,20 @@
+{
+  "domain": "example.com",
+  "record_type": "A",
+  "edns_enabled": true,
+  "dnssec_ok_requested": true,
+  "answer_count": 3,
+  "rrsig_count": 1,
+  "dnskey_count": 0,
+  "ds_count": 0,
+  "query_count": 3,
+  "dnssec_validation": {
+    "secure": false,
+    "bogus": true,
+    "unchecked": false,
+    "validated_rrsets": 0,
+    "errors": [
+      "no DNSKEY for signer example.com"
+    ]
+  }
+}

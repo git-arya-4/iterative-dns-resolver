@@ -33,6 +33,9 @@ from idns.model import (
     TXTRecord,
     SOARecord,
     OPTRecord,
+    DNSKEYRecord,
+    RRSIGRecord,
+    DSRecord,
 )
 
 from idns.wire.header_codec import DNSHeaderCodec
@@ -78,6 +81,9 @@ TYPE_MX = 15
 TYPE_TXT = 16
 TYPE_AAAA = 28
 TYPE_OPT = 41
+TYPE_RRSIG = 46
+TYPE_DNSKEY = 48
+TYPE_DS = 43
 
 
 # ============================================================
@@ -560,6 +566,15 @@ class DNSMessageEncoder:
         if isinstance(record, OPTRecord):
             return cls._encode_opt_record(record, encoder, current_offset)
 
+        if isinstance(record, DNSKEYRecord):
+            return cls._encode_dnskey_record(record, encoder, current_offset)
+
+        if isinstance(record, RRSIGRecord):
+            return cls._encode_rrsig_record(record, encoder, current_offset)
+
+        if isinstance(record, DSRecord):
+            return cls._encode_ds_record(record, encoder, current_offset)
+
         raise DNSUnsupportedRecordTypeError(
             f"unsupported record type: "
             f"{type(record).__name__}"
@@ -839,6 +854,48 @@ class DNSMessageEncoder:
             )
             + bytes(option_data)
         )
+
+    @classmethod
+    def _encode_dnskey_record(cls, record, encoder, current_offset) -> bytes:
+        name = encoder.encode(record.name, current_offset=current_offset)
+        if not 0 <= record.flags <= 0xFFFF or not 0 <= record.protocol <= 0xFF:
+            raise DNSMessageEncodeError("invalid DNSKEY flags or protocol")
+        if not 0 <= record.algorithm <= 0xFF or not isinstance(record.public_key, bytes):
+            raise DNSMessageEncodeError("invalid DNSKEY algorithm or public key")
+        rdata = struct.pack("!HBB", record.flags, record.protocol, record.algorithm) + record.public_key
+        return cls._build_record(name, TYPE_DNSKEY, record.ttl, rdata)
+
+    @classmethod
+    def _encode_rrsig_record(cls, record, encoder, current_offset) -> bytes:
+        name = encoder.encode(record.name, current_offset=current_offset)
+        type_code = next(
+            (code for code, type_name in {
+                TYPE_A: "A", TYPE_NS: "NS", TYPE_CNAME: "CNAME", TYPE_SOA: "SOA",
+                TYPE_MX: "MX", TYPE_TXT: "TXT", TYPE_AAAA: "AAAA",
+                TYPE_RRSIG: "RRSIG", TYPE_DNSKEY: "DNSKEY", TYPE_DS: "DS",
+            }.items() if type_name == record.type_covered.upper()),
+            None,
+        )
+        if type_code is None:
+            raise DNSMessageEncodeError(f"unsupported RRSIG covered type: {record.type_covered}")
+        rdata_offset = current_offset + len(name) + 10
+        signer = encoder.encode(record.signer_name, current_offset=rdata_offset + 18)
+        rdata = struct.pack(
+            "!HBBIIIH",
+            type_code, record.algorithm, record.labels, record.original_ttl,
+            record.signature_expiration, record.signature_inception, record.key_tag,
+        ) + signer + record.signature
+        return cls._build_record(name, TYPE_RRSIG, record.ttl, rdata)
+
+    @classmethod
+    def _encode_ds_record(cls, record, encoder, current_offset) -> bytes:
+        name = encoder.encode(record.name, current_offset=current_offset)
+        if not 0 <= record.key_tag <= 0xFFFF or not 0 <= record.algorithm <= 0xFF:
+            raise DNSMessageEncodeError("invalid DS key tag or algorithm")
+        if not 0 <= record.digest_type <= 0xFF or not isinstance(record.digest, bytes):
+            raise DNSMessageEncodeError("invalid DS digest")
+        rdata = struct.pack("!HBB", record.key_tag, record.algorithm, record.digest_type) + record.digest
+        return cls._build_record(name, TYPE_DS, record.ttl, rdata)
 
     # ========================================================
     # BUILD RESOURCE RECORD

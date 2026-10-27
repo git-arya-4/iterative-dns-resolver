@@ -1,0 +1,19 @@
+{
+  "domain": "www.github.com",
+  "record_type": "A",
+  "query_count": 9,
+  "answer_count": 2,
+  "trace_log": [
+    "cache miss: www.github.com A",
+    "root query: www.github.com A",
+    "tld query: www.github.com A",
+    "bootstrap root query: ns-520.awsdns-01.net A",
+    "bootstrap tld query: ns-520.awsdns-01.net A",
+    "bootstrap authoritative query: ns-520.awsdns-01.net (205.251.193.194)",
+    "bootstrap root query: ns-520.awsdns-01.net AAAA",
+    "bootstrap tld query: ns-520.awsdns-01.net AAAA",
+    "bootstrap authoritative query: ns-520.awsdns-01.net (205.251.193.194)",
+    "authoritative query: ns-520.awsdns-01.net (205.251.194.8)",
+    "CNAME: www.github.com -> github.com"
+  ]
+}

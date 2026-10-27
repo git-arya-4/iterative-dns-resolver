@@ -14,6 +14,7 @@ from idns.model import (
 )
 from idns.wire.message_decoder import DNSMessageDecoder
 from idns.wire.message_encoder import DNSMessageEncoder
+from idns.extensions.edns0 import opt_from_transport_config
 
 
 class RootQuery:
@@ -37,6 +38,10 @@ class RootQuery:
     ) -> tuple[DNSMessage, TransportResult]:
         """Query the root-server candidates for a domain."""
 
+        additionals = []
+        opt = opt_from_transport_config(self.transport_config)
+        if opt is not None:
+            additionals.append(opt)
         message = DNSMessage(
             header=DNSHeader(
                 transaction_id=transaction_id,
@@ -49,6 +54,7 @@ class RootQuery:
                     qclass="IN",
                 )
             ],
+            additionals=additionals,
         )
 
         query_bytes = DNSMessageEncoder.encode(message)

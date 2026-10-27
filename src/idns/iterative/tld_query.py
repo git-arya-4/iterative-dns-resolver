@@ -10,8 +10,10 @@ from idns.iterative.bootstrap import NameserverBootstrap
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.referral import ReferralParser
 from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion
+from idns.contracts.resolver import ResolutionContext
 from idns.wire.message_decoder import DNSMessageDecoder
 from idns.wire.message_encoder import DNSMessageEncoder
+from idns.extensions.edns0 import opt_from_transport_config
 
 
 class TLDQuery:
@@ -34,6 +36,7 @@ class TLDQuery:
         delegated_zone: str,
         transaction_id: int = 0x1234,
         record_type: str = "A",
+        context: ResolutionContext | None = None,
     ) -> tuple[DNSMessage, TransportResult]:
         """Follow a referral and query one of its TLD nameservers."""
 
@@ -60,7 +63,18 @@ class TLDQuery:
 
             if not addresses and self.bootstrap is not None:
                 try:
-                    addresses = self.bootstrap.resolve(nameserver)
+                    effective_context = context
+                    if effective_context is None:
+                        candidate = getattr(self.bootstrap, "query_context", None)
+                        if isinstance(candidate, ResolutionContext):
+                            effective_context = candidate
+                    if effective_context is None:
+                        addresses = self.bootstrap.resolve(nameserver)
+                    else:
+                        addresses = self.bootstrap.resolve(
+                            nameserver,
+                            context=effective_context,
+                        )
                 except ValueError:
                     # This nameserver may be the hostname currently being
                     # bootstrapped. Continue to other referral nameservers
@@ -83,6 +97,10 @@ class TLDQuery:
                 "or nameserver bootstrap."
             )
 
+        additionals = []
+        opt = opt_from_transport_config(self.transport_config)
+        if opt is not None:
+            additionals.append(opt)
         message = DNSMessage(
             header=DNSHeader(
                 transaction_id=transaction_id,
@@ -95,6 +113,7 @@ class TLDQuery:
                     qclass="IN",
                 )
             ],
+            additionals=additionals,
         )
 
         query_bytes = DNSMessageEncoder.encode(message)

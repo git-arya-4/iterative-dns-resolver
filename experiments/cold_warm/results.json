@@ -1,0 +1,32 @@
+{
+  "domain": "example.com",
+  "record_type": "A",
+  "cold": {
+    "latencies_ms": [
+      1744.5545,
+      1471.3152,
+      1241.321
+    ],
+    "summary": {
+      "samples": 3,
+      "minimum_ms": 1241.321,
+      "median_ms": 1471.3152,
+      "mean_ms": 1485.7302333333332,
+      "maximum_ms": 1744.5545
+    }
+  },
+  "warm": {
+    "latencies_ms": [
+      0.0592,
+      0.0401,
+      0.0308
+    ],
+    "summary": {
+      "samples": 3,
+      "minimum_ms": 0.0308,
+      "median_ms": 0.0401,
+      "mean_ms": 0.043366666666666664,
+      "maximum_ms": 0.0592
+    }
+  }
+}

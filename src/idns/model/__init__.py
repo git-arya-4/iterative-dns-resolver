@@ -29,6 +29,9 @@ from .records import (
     SOARecord,
     EDNSOption,
     OPTRecord,
+    DNSKEYRecord,
+    RRSIGRecord,
+    DSRecord,
 )
 
 from .message import (
@@ -55,6 +58,9 @@ __all__ = [
     "SOARecord",
     "EDNSOption",
     "OPTRecord",
+    "DNSKEYRecord",
+    "RRSIGRecord",
+    "DSRecord",
 
     "DNSMessage",
     "DNSRecord",

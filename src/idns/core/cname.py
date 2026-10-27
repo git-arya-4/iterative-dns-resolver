@@ -81,6 +81,7 @@ class CNAMEChainProcessor:
             current_result.total_rtt_ms += next_result.total_rtt_ms
             current_result.rcode = next_result.rcode
             current_result.is_nxdomain = next_result.is_nxdomain
+            current_result.is_nodata = next_result.is_nodata
 
             # In a multi-hop scenario where the next result is a miss but target is NXDOMAIN
             if current_result.is_nxdomain:

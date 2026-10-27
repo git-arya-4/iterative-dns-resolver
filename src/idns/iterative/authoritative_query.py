@@ -9,6 +9,7 @@ from idns.contracts.transport import (
 from idns.model import DNSHeader, DNSMessage, DNSName, DNSQuestion
 from idns.wire.message_decoder import DNSMessageDecoder
 from idns.wire.message_encoder import DNSMessageEncoder
+from idns.extensions.edns0 import opt_from_transport_config
 
 
 class AuthoritativeQuery:
@@ -31,6 +32,10 @@ class AuthoritativeQuery:
     ) -> tuple[DNSMessage, TransportResult]:
         """Query the authoritative nameserver."""
 
+        additionals = []
+        opt = opt_from_transport_config(self.transport_config)
+        if opt is not None:
+            additionals.append(opt)
         message = DNSMessage(
             header=DNSHeader(
                 transaction_id=transaction_id,
@@ -43,6 +48,7 @@ class AuthoritativeQuery:
                     qclass="IN",
                 )
             ],
+            additionals=additionals,
         )
 
         query_bytes = DNSMessageEncoder.encode(message)

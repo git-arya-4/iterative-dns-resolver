@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from idns.contracts.resolver import ResolutionContext
-from idns.errors import DNSTimeoutError
+from idns.errors import DNSTimeoutError, ServerUnreachableError
 from idns.iterative.engine import IterativeEngine
 from idns.model import ARecord, DNSHeader, DNSMessage, DNSName, NSRecord
 
@@ -365,6 +365,46 @@ def test_resolve_raises_last_timeout_when_all_authoritative_servers_timeout():
 
         with pytest.raises(DNSTimeoutError):
             engine.resolve("example.com", "A")
+
+
+def test_resolve_fails_over_after_authoritative_network_error():
+    engine = make_engine()
+    root_response = make_response()
+    tld_response = make_response(
+        authorities=[
+            NSRecord(
+                name=DNSName("example.com"),
+                nameserver=DNSName("ns1.example.com"),
+                ttl=300,
+            )
+        ]
+    )
+    answer = make_response(
+        answers=[ARecord(DNSName("example.com"), "192.0.2.80", 300)]
+    )
+    nameserver = DNSName("ns1.example.com")
+
+    with (
+        patch("idns.iterative.engine.RootQuery") as root_query,
+        patch("idns.iterative.engine.TLDQuery") as tld_query,
+        patch("idns.iterative.engine.ReferralParser.select_nameservers") as select_ns,
+        patch("idns.iterative.engine.GlueExtractor.extract") as extract_glue,
+        patch("idns.iterative.engine.AuthoritativeQuery") as auth_query,
+    ):
+        root_query.return_value.query.return_value = (root_response, SimpleNamespace(rtt_ms=1.0))
+        tld_query.return_value.query.return_value = (tld_response, SimpleNamespace(rtt_ms=2.0))
+        select_ns.return_value = [nameserver]
+        extract_glue.return_value = {nameserver: ["192.0.2.53", "192.0.2.54"]}
+        auth_query.return_value.query.side_effect = [
+            ServerUnreachableError("server is unreachable"),
+            (answer, SimpleNamespace(rtt_ms=4.0)),
+        ]
+
+        result = engine.resolve("example.com", "A")
+
+    assert result.answers == answer.answers
+    assert auth_query.return_value.query.call_count == 2
+    assert result.query_count == 3
 
 
 def test_is_final_answer_detects_dns_error_rcodes():

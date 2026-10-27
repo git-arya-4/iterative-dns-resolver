@@ -13,7 +13,12 @@ from idns.iterative.referral import ReferralParser
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.bootstrap import NameserverBootstrap
 from idns.iterative.delegation import DelegationTracker
-from idns.errors import MaxDepthExceededError, ReferralError, DNSTimeoutError
+from idns.errors import (
+    MaxDepthExceededError,
+    ReferralError,
+    DNSTimeoutError,
+    ServerUnreachableError,
+)
 
 class IterativeEngine(DNSResolverProtocol):
     """
@@ -42,6 +47,10 @@ class IterativeEngine(DNSResolverProtocol):
     ) -> ResolverResult:
         context = context or ResolutionContext()
         qname = DNSName(domain_name)
+        # Bootstrap is invoked from TLDQuery as well as directly below.  Keep
+        # the request context on the helper so those nested queries contribute
+        # to the same logical query count without changing old call sites.
+        self.bootstrap.query_context = context
         
         root_query = RootQuery(
             root_servers=self.root_servers,
@@ -110,7 +119,7 @@ class IterativeEngine(DNSResolverProtocol):
 
             next_response: Optional[DNSMessage] = None
             progressed = False
-            last_timeout_error = None
+            last_transport_error = None
 
             for referral_nameserver in referral_nameservers:
                 server_addresses = glue.get(referral_nameserver, [])
@@ -138,13 +147,15 @@ class IterativeEngine(DNSResolverProtocol):
                             domain_name,
                             record_type=record_type,
                         )
-                    except DNSTimeoutError as e:
-                        # Failover to the next address or referral nameserver
-                        last_timeout_error = e
+                    except (DNSTimeoutError, ServerUnreachableError) as e:
+                        # Fail over on both timeout and ordinary network
+                        # reachability failures (for example connection
+                        # refused/ICMP port unreachable).
+                        last_transport_error = e
                         context.trace_log.append(f"timeout/failover: {address}")
                         continue
 
-                    last_timeout_error = None
+                    last_transport_error = None
                     context.query_count += 1
                     total_rtt += auth_result.rtt_ms
 
@@ -167,8 +178,8 @@ class IterativeEngine(DNSResolverProtocol):
                     break
 
             if not progressed or next_response is None:
-                if last_timeout_error is not None:
-                    raise last_timeout_error
+                if last_transport_error is not None:
+                    raise last_transport_error
                 # No progress could be made, return best effort current response
                 return self._build_result(domain_name, record_type, current_response, context, total_rtt)
 
@@ -183,7 +194,10 @@ class IterativeEngine(DNSResolverProtocol):
         if response.answers:
             return True
         # NODATA is NOERROR (0) with no answers but has SOA
-        if response.header.rcode == 0 and not response.answers and any(getattr(r, 'record_type', '') == 'SOA' for r in response.authorities):
+        if response.header.rcode == 0 and not response.answers and any(
+            getattr(r, "record_type", "") == "SOA"
+            for r in response.authorities
+        ):
             return True
         return False
 
@@ -196,6 +210,14 @@ class IterativeEngine(DNSResolverProtocol):
         total_rtt: float,
     ) -> ResolverResult:
         is_nxdomain = (response.header.rcode == 3)
+        is_nodata = (
+            response.header.rcode == 0
+            and not response.answers
+            and any(
+                getattr(record, "record_type", "") == "SOA"
+                for record in response.authorities
+            )
+        )
         return ResolverResult(
             domain_name=domain_name,
             record_type=record_type,
@@ -212,4 +234,5 @@ class IterativeEngine(DNSResolverProtocol):
             total_rtt_ms=total_rtt,
             cname_chain=list(context.cname_chain),
             trace_log=list(context.trace_log),
+            is_nodata=is_nodata,
         )

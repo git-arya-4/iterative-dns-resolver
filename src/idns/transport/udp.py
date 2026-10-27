@@ -54,9 +54,13 @@ class UDPTransport(DNSTransportProtocol):
                     # Keep receiving until the response matches this query.
                     # An unrelated UDP packet must not terminate the query.
                     while True:
-                        raw_response, source_address = sock.recvfrom(
-                            config.buffer_size
+                        receive_size = max(
+                            config.buffer_size,
+                            config.edns_udp_payload_size
+                            if config.edns_enabled
+                            else 0,
                         )
+                        raw_response, source_address = sock.recvfrom(receive_size)
 
                         source_ip, source_port = source_address
 

@@ -27,7 +27,11 @@ from idns.contracts.transport import TransportConfig
 from idns.errors import ConfigError
 
 
-SUPPORTED_RECORD_TYPES = frozenset({"A", "AAAA", "NS", "CNAME", "MX", "TXT", "SOA"})
+SUPPORTED_RECORD_TYPES = frozenset({
+    "A", "AAAA", "NS", "CNAME", "MX", "TXT", "SOA",
+    "RRSIG", "DNSKEY",
+    "DS",
+})
 
 
 class CoreResolver(DNSResolverProtocol):

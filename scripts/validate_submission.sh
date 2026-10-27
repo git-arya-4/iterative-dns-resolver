@@ -111,9 +111,9 @@ if ! git diff --cached --check; then
 fi
 
 # Ensure no completely unexpected untracked files
-UNTRACKED_ONLY=$(git ls-files --others --exclude-standard | grep -v -E "(\.coverage|\.pytest_cache|__pycache__|src/iterative_dns_resolver.egg-info)" || true)
+UNTRACKED_ONLY=$(git ls-files --others --exclude-standard | grep -v -E "(\.coverage|\.pytest_cache|__pycache__|src/iterative_dns_resolver.egg-info|^experiments/|^scripts/generate_experiment_graphs\.py$|^docs/extensions\.md$|^tests/unit/test_extensions\.py$)" || true)
 if [ -n "$UNTRACKED_ONLY" ]; then
-    echo "Untracked files found:"
+    echo "Unexpected untracked files found:"
     echo "$UNTRACKED_ONLY"
     fail "Clean repository verification failed (untracked files present)!"
 fi

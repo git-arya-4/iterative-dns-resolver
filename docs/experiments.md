@@ -2,7 +2,8 @@
 
 **Owner**: Swastik + Shriyansh + Arya  
 **Subsystem Directory**: `experiments/`  
-**Status**: Experiments 8.1–8.4 implemented; OS integration documented.
+**Status**: Experiments 8.1–8.4 implemented; live validation artifacts and
+dependency-free SVG graphs are saved under `experiments/`.
 
 > **Note**: The four listed experiments are implemented:
 > 1. Cold vs Warm Resolution Latency
@@ -46,6 +47,7 @@ local `dig +trace` run:
 ```bash
 PYTHONPATH=src python -m idns.cli experiment query_count \
   --domain example.com --record-type A \
+  --dig-server 198.41.0.4 \
   --output experiments/query_count/results.json
 ```
 
@@ -85,3 +87,17 @@ experiment total of the two controlled root/TLD exchanges plus every real
 authoritative UDP send, including retries; `control_query_attempt_count` is
 reported separately so these synthetic exchanges are not mistaken for socket
 attempts.
+
+## Graphs and reproducibility
+
+The saved JSON measurements can be converted to SVG without installing a
+plotting library:
+
+```bash
+PYTHONPATH=src python scripts/generate_experiment_graphs.py
+```
+
+The captured artifacts include cold/warm latency, cache-hit ratio, query
+count, unreachable-authority failover, OS integration, and end-to-end
+record-type checks. `results_dig.json` and `dig_trace.txt` contain the sandbox
+comparison against a forced-root `dig +trace` run.

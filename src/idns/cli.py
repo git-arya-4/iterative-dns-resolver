@@ -74,6 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
     exp_parser.add_argument("--output", type=Path, help="Write experiment JSON to this path")
     exp_parser.add_argument("--trace-file", type=Path, help="JSON query trace for cache_hit_ratio")
     exp_parser.add_argument("--dig-command", default="dig", help="dig executable for query_count")
+    exp_parser.add_argument("--dig-server", help="Optional root server address for dig +trace")
 
     return parser
 
@@ -93,7 +94,14 @@ def _format_record(record: object) -> str:
 
 def _print_result(result: ResolverResult, trace: bool) -> None:
     print(f"Query: {result.domain_name} {result.record_type}")
-    print(f"Status: {'NXDOMAIN' if result.is_nxdomain else f'RCODE={result.rcode}'}")
+    status = (
+        "NXDOMAIN"
+        if result.is_nxdomain
+        else "NODATA"
+        if getattr(result, "is_nodata", False)
+        else f"RCODE={result.rcode}"
+    )
+    print(f"Status: {status}")
     print(f"Cache: {'hit' if result.is_cache_hit else 'miss'}")
     print(f"Queries: {result.query_count}")
     if result.answers:
@@ -181,6 +189,7 @@ def main(args: list[str] | None = None) -> int:
                     parsed_args.domain,
                     parsed_args.record_type,
                     dig_command=parsed_args.dig_command,
+                    dig_server=parsed_args.dig_server,
                 )
                 encoded = json.dumps(result, indent=2)
                 if parsed_args.output:

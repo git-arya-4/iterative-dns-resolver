@@ -21,6 +21,7 @@ def run_query_count_comparison(
     record_type: str = "A",
     *,
     dig_command: str = "dig",
+    dig_server: str | None = None,
     runner: Callable[..., Any] = subprocess.run,
     clear_cache: bool = True,
 ) -> dict[str, Any]:
@@ -39,8 +40,12 @@ def run_query_count_comparison(
     resolver_count = int(getattr(result, "query_count", 0))
 
     try:
+        command = [dig_command, "+trace"]
+        if dig_server:
+            command.append(f"@{dig_server}")
+        command.extend([domain, record_type])
         completed = runner(
-            [dig_command, "+trace", domain, record_type],
+            command,
             capture_output=True,
             text=True,
             check=False,

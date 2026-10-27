@@ -1,0 +1,56 @@
+{
+  "total_queries": 8,
+  "cache_hits": 3,
+  "cache_misses": 5,
+  "hit_ratio": 0.375,
+  "queries": [
+    {
+      "index": 0,
+      "domain": "example.com",
+      "record_type": "A",
+      "cache_hit": false
+    },
+    {
+      "index": 1,
+      "domain": "google.com",
+      "record_type": "A",
+      "cache_hit": false
+    },
+    {
+      "index": 2,
+      "domain": "wikipedia.org",
+      "record_type": "A",
+      "cache_hit": false
+    },
+    {
+      "index": 3,
+      "domain": "github.com",
+      "record_type": "A",
+      "cache_hit": false
+    },
+    {
+      "index": 4,
+      "domain": "example.com",
+      "record_type": "A",
+      "cache_hit": true
+    },
+    {
+      "index": 5,
+      "domain": "google.com",
+      "record_type": "A",
+      "cache_hit": true
+    },
+    {
+      "index": 6,
+      "domain": "iana.org",
+      "record_type": "A",
+      "cache_hit": false
+    },
+    {
+      "index": 7,
+      "domain": "github.com",
+      "record_type": "A",
+      "cache_hit": true
+    }
+  ]
+}

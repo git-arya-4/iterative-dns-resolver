@@ -127,3 +127,17 @@ def test_negative_cache_can_be_disabled_independently():
 
     assert cache.get(key) is None
     assert cache.get_stats().size == 0
+
+
+def test_explicit_negative_ttl_is_capped_by_cache_configuration():
+    cache = InMemoryDNSCache(
+        CacheConfig(negative_ttl_seconds=15),
+        clock=lambda: 100.0,
+    )
+    key = CacheKey("missing.example.com", "A")
+
+    cache.put_negative(key, is_nxdomain=True, ttl_seconds=300)
+
+    entry = cache.get(key)
+    assert entry is not None
+    assert entry.ttl_seconds == 15

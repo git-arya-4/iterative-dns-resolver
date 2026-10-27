@@ -1,0 +1,34 @@
+[
+  {
+    "domain": "example.com",
+    "record_type": "A"
+  },
+  {
+    "domain": "google.com",
+    "record_type": "A"
+  },
+  {
+    "domain": "wikipedia.org",
+    "record_type": "A"
+  },
+  {
+    "domain": "github.com",
+    "record_type": "A"
+  },
+  {
+    "domain": "example.com",
+    "record_type": "A"
+  },
+  {
+    "domain": "google.com",
+    "record_type": "A"
+  },
+  {
+    "domain": "iana.org",
+    "record_type": "A"
+  },
+  {
+    "domain": "github.com",
+    "record_type": "A"
+  }
+]
