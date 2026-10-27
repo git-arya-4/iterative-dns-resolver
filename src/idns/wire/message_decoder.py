@@ -38,6 +38,9 @@ from idns.model import (
     SOARecord,
     EDNSOption,
     OPTRecord,
+    DNSKEYRecord,
+    RRSIGRecord,
+    DSRecord,
 )
 
 from idns.wire.cursor import ByteCursor, DNSBoundsError
@@ -84,6 +87,9 @@ TYPE_MX = 15
 TYPE_TXT = 16
 TYPE_AAAA = 28
 TYPE_OPT = 41
+TYPE_RRSIG = 46
+TYPE_DNSKEY = 48
+TYPE_DS = 43
 
 
 TYPE_NAMES = {
@@ -94,6 +100,9 @@ TYPE_NAMES = {
     TYPE_MX: "MX",
     TYPE_TXT: "TXT",
     TYPE_AAAA: "AAAA",
+    TYPE_RRSIG: "RRSIG",
+    TYPE_DS: "DS",
+    TYPE_DNSKEY: "DNSKEY",
 }
 
 
@@ -501,6 +510,72 @@ class DNSMessageDecoder:
                     retry=retry,
                     expire=expire,
                     minimum=minimum,
+                    ttl=ttl,
+                )
+
+            if record_type == TYPE_DNSKEY:
+                if rdlength < 4:
+                    raise DNSMessageDecodeError("DNSKEY RDATA is too short")
+                flags = cursor.read_u16()
+                protocol = cursor.read_u8()
+                algorithm = cursor.read_u8()
+                public_key = cursor.read_bytes(rdlength - 4)
+                return DNSKEYRecord(
+                    name=name,
+                    flags=flags,
+                    protocol=protocol,
+                    algorithm=algorithm,
+                    public_key=public_key,
+                    ttl=ttl,
+                )
+
+            if record_type == TYPE_DS:
+                if rdlength < 4:
+                    raise DNSMessageDecodeError("DS RDATA is too short")
+                key_tag = cursor.read_u16()
+                algorithm = cursor.read_u8()
+                digest_type = cursor.read_u8()
+                digest = cursor.read_bytes(rdlength - 4)
+                return DSRecord(
+                    name=name,
+                    key_tag=key_tag,
+                    algorithm=algorithm,
+                    digest_type=digest_type,
+                    digest=digest,
+                    ttl=ttl,
+                )
+
+            if record_type == TYPE_RRSIG:
+                if rdlength < 18:
+                    raise DNSMessageDecodeError("RRSIG RDATA is too short")
+                type_covered_code = cursor.read_u16()
+                algorithm = cursor.read_u8()
+                labels = cursor.read_u8()
+                original_ttl = cursor.read_u32()
+                signature_expiration = cursor.read_u32()
+                signature_inception = cursor.read_u32()
+                key_tag = cursor.read_u16()
+                signer_name = DNSCompressionDecoder.decode(cursor)
+                consumed = cursor.position - rdata_start
+                if consumed > rdlength:
+                    raise DNSMessageDecodeError("RRSIG signer name exceeds RDATA")
+                signature = cursor.read_bytes(rdlength - consumed)
+                type_covered = next(
+                    (type_name for code, type_name in TYPE_NAMES.items()
+                     if code == type_covered_code),
+                    f"TYPE{type_covered_code}",
+                )
+                return RRSIGRecord(
+                    name=name,
+                    type_covered=type_covered,
+                    algorithm=algorithm,
+                    labels=labels,
+                    original_ttl=original_ttl,
+                    signature_expiration=signature_expiration,
+                    signature_inception=signature_inception,
+                    key_tag=key_tag,
+                    signer_name=signer_name,
+                    signature=signature,
                     ttl=ttl,
                 )
 

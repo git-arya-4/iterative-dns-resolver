@@ -10,6 +10,9 @@ udp_timeout_seconds = 2.0
 max_retries = 3
 enable_tcp_fallback = true
 buffer_size_bytes = 512
+edns_enabled = false
+edns_udp_payload_size = 1232
+edns_dnssec_ok = false
 
 [resolver]
 max_referral_depth = 10
@@ -22,6 +25,8 @@ enabled = true
 max_entries = 10000
 negative_ttl_seconds = 300
 rfc2308_enabled = true
+prefetch_enabled = false
+prefetch_threshold_seconds = 30
 
 [observability]
 log_level = "INFO"

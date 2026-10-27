@@ -1,0 +1,14 @@
+{
+  "server_port": 53,
+  "explicit_local_nslookup": {
+    "returncode": 0,
+    "stdout": "Server:  UnKnown\nAddress:  127.0.0.1\n\nName:    example.com\nAddresses:  2606:4700:8395:72db:f21b:0:ef6b:ff98\n\t  172.66.147.243\n\t  104.20.23.154\n\n",
+    "stderr": "Non-authoritative answer:\n\n"
+  },
+  "resolver_answer_ip": "172.66.147.243",
+  "https_request": {
+    "status_line": "HTTP/1.1 200 OK",
+    "bytes_received": 311,
+    "returncode": 0
+  }
+}

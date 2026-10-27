@@ -1,0 +1,48 @@
+
+; <<>> DiG 9.18.49-1~deb12u2-Debian <<>> +trace @198.41.0.4 +time=3 +tries=1 example.com A
+; (1 server found)
+;; global options: +cmd
+.			518400	IN	NS	l.root-servers.net.
+.			518400	IN	NS	j.root-servers.net.
+.			518400	IN	NS	f.root-servers.net.
+.			518400	IN	NS	h.root-servers.net.
+.			518400	IN	NS	d.root-servers.net.
+.			518400	IN	NS	b.root-servers.net.
+.			518400	IN	NS	k.root-servers.net.
+.			518400	IN	NS	i.root-servers.net.
+.			518400	IN	NS	m.root-servers.net.
+.			518400	IN	NS	e.root-servers.net.
+.			518400	IN	NS	g.root-servers.net.
+.			518400	IN	NS	c.root-servers.net.
+.			518400	IN	NS	a.root-servers.net.
+.			518400	IN	RRSIG	NS 8 0 518400 20261109050000 20261027040000 8763 . CSlkFvkM/KRM8RC+QaXLGIqVlKtVdCW39/n5ixjH33i45hDS7eGJEjAU GtPOhu3QpQTuc3gXVX+0Kl3f30LBLoVTRms7+Z7BtSXBomfsEwkN1pRP e20FmpOkV7KOpblqVMphw3UpiZQBLfgOEwqJDl6KvIE6/aoPl/vr8QmP mzeHjWPf7OTKtwdSS3MAtqTvc0cbCHTDisBrwJPik9ekay1QIahOS9Iq THyJCRzon3jO0CtKy3Zup5y52ViPUA7lIYM9CDFyeyS3Zpa2VD29dxP/ 8zDf5C7EtFEaWHxx4o9k3+VwrXO7RCe1Ud92KiIbCPgcQby9OWSCCvlQ lfZiqA==
+;; Received 1097 bytes from 198.41.0.4#53(198.41.0.4) in 163 ms
+
+com.			172800	IN	NS	b.gtld-servers.net.
+com.			172800	IN	NS	l.gtld-servers.net.
+com.			172800	IN	NS	f.gtld-servers.net.
+com.			172800	IN	NS	j.gtld-servers.net.
+com.			172800	IN	NS	c.gtld-servers.net.
+com.			172800	IN	NS	h.gtld-servers.net.
+com.			172800	IN	NS	k.gtld-servers.net.
+com.			172800	IN	NS	a.gtld-servers.net.
+com.			172800	IN	NS	d.gtld-servers.net.
+com.			172800	IN	NS	e.gtld-servers.net.
+com.			172800	IN	NS	i.gtld-servers.net.
+com.			172800	IN	NS	g.gtld-servers.net.
+com.			172800	IN	NS	m.gtld-servers.net.
+com.			86400	IN	DS	19718 13 2 8ACBB0CD28F41250A80A491389424D341522D946B0DA0C0291F2D3D7 71D7805A
+com.			86400	IN	RRSIG	DS 8 1 86400 20261109050000 20261027040000 8763 . v/vKZDumBsFa4udevcZEFMlsKDmFQLSjQbfWeM5T41WWoUT4udkJX6BQ qcENrM4rHOSLRAjL2J5GLYO5Xh81FcmSmiNTZJejky57ILSivh58PCEh 6tPZFFcs7Ec+b9oXsb1nAzToKoEPz0kCEPjKohECPtx39j7O0o5jSrkI G3I21BMpESeqMNG4c8pWTzHMRdwC6zd3VXUW9peeFEhtFgWCHx51gkpd swmFvebgr7vOAQYk+PL5hdnr5ttSs80iOYHUlD53vLcokhx/fhxQk+v9 sRj1CSqq4ppO08WADcmAsaaicDMzIaJrSh/XjamlN/BTTKbQv/UCXFqW KLE8PQ==
+;; Received 1199 bytes from 192.33.4.12#53(c.root-servers.net) in 71 ms
+
+example.com.		172800	IN	NS	hera.ns.cloudflare.com.
+example.com.		172800	IN	NS	elliott.ns.cloudflare.com.
+example.com.		86400	IN	DS	2371 13 2 C988EC423E3880EB8DD8A46FE06CA230EE23F35B578D64E78B29C3E1 C83D245A
+example.com.		86400	IN	RRSIG	DS 13 2 86400 20261101013317 20261025002317 65344 com. 74li2aMojC1BxjCRiVarr1Lafmcb5oM3ITHEvoINP7fWqmR12KSqFVSg TbYVulxc8QOP/W7AsgljkS7t8s1F7g==
+;; Received 506 bytes from 192.42.93.30#53(g.gtld-servers.net) in 243 ms
+
+example.com.		300	IN	A	104.20.23.154
+example.com.		300	IN	A	172.66.147.243
+example.com.		300	IN	RRSIG	A 13 2 300 20261028083307 20261026063307 34505 example.com. XpXQZSc2lBpgm2tLVzXLjS8z2dt3Ez5Hhvr6WQnOOgKqi0mhxBWF1dAg aIBML9V/DBRpV0ksXMlEjxyXUf7Aug==
+;; Received 179 bytes from 172.64.32.162#53(hera.ns.cloudflare.com) in 24 ms
+

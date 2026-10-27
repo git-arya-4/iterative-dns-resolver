@@ -1,0 +1,12 @@
+{
+  "domain": "example.com",
+  "record_type": "A",
+  "resolver_query_count": 3,
+  "dig_trace_query_count": 4,
+  "difference": -1,
+  "dig_available": true,
+  "dig_return_code": 0,
+  "comparison_is_approximate": true,
+  "measurement_definition": "resolver query_count vs dig +trace Received response lines",
+  "resolver_cache_cleared": true
+}

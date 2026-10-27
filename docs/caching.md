@@ -1,13 +1,14 @@
 # DNS Cache Subsystem
 
-**Task:** 1.6 - Define the cache API with Swastik
+**Status:** Implemented positive and negative TTL caching
 **Owners:** Swastik (cache implementation) and Arya (shared contracts)
 
 ## Purpose
 
 The cache reduces repeated DNS queries, honors record TTLs, supports RFC 2308
 negative caching, and exposes metrics for later experiments. `InMemoryDNSCache`
-provides the Task 3.10 and Tasks 5.1-5.3 cache behavior.
+provides the TTL, RFC 2308, and cache-aware resolver behavior used by the
+production resolver.
 
 ## API (`idns.contracts.cache`)
 
@@ -15,7 +16,8 @@ provides the Task 3.10 and Tasks 5.1-5.3 cache behavior.
   RRset. `canonical()` and `from_query()` normalize domain case, trailing dots,
   record type, and class.
 - `CacheConfig` contains `enabled`, `max_entries`,
-  `negative_ttl_seconds`, and `rfc2308_enabled`.
+  `negative_ttl_seconds`, and `rfc2308_enabled`. The configured negative TTL
+  is an upper bound for both NXDOMAIN and NODATA entries.
 - `CacheEntry` stores records or a negative result. Use
   `create_positive()` for answers and `create_negative()` for NXDOMAIN or
   NODATA. `is_expired()` and `remaining_ttl()` apply TTL behavior.
@@ -30,8 +32,9 @@ provides the Task 3.10 and Tasks 5.1-5.3 cache behavior.
 
 - `put_positive()` caches a positive RRset using its lowest record TTL.
 - `put_negative()` caches NXDOMAIN or NODATA entries. With an SOA record it
-  uses `min(SOA TTL, SOA MINIMUM)` capped by `negative_ttl_seconds`; without
-  one it uses that configured fallback TTL.
+  uses `min(SOA TTL, SOA MINIMUM, negative_ttl_seconds)`; without one it uses
+  the configured fallback TTL. Explicit TTL overrides are capped by the same
+  policy.
 - `get()` lazily removes expired positive and negative entries, recording a
   cache miss and eviction.
 - When capacity is reached, the cache evicts the entry with the earliest
@@ -41,17 +44,23 @@ provides the Task 3.10 and Tasks 5.1-5.3 cache behavior.
   error applies to every queried record type. NODATA entries remain
   record-type-specific.
 
-## Required behavior for later implementation
+## Resolver integration
 
 - Cache positive RRsets using the lowest TTL in the set.
 - Cache CNAMEs under the alias/type key and the target separately.
-- Distinguish NXDOMAIN (`is_nxdomain=True`) from NODATA (`False`).
+- Distinguish NXDOMAIN (`is_nxdomain=True`) from NODATA (`is_nodata=True`).
 - Remove expired entries on lookup and apply a deterministic capacity policy.
 - `TTLCache.get()` accepts an optional timestamp so expiration is deterministic
   in tests; normal callers use the current clock.
 
-## Follow-up tasks
+The cache-aware resolver delegates negative-entry creation to the cache so a
+custom `CacheConfig` is honoured. Empty non-authoritative referrals are not
+classified as NODATA and are not cached as negative answers.
 
-- **2.7:** cache store/get/put skeleton.
-- **3.10:** TTL storage and expiration (`TTLCache`).
-- **5.1-5.3:** completed cache behavior; core-resolver integration remains.
+## Near-expiry prefetching
+
+Set `CacheConfig(prefetch_enabled=True)` to refresh a valid entry when its
+remaining TTL is at or below `prefetch_threshold_seconds` (30 seconds by
+default). The refresh uses the iterative resolver and stores the new RRset;
+an upstream failure is ignored while the old entry remains valid. Prefetching
+is disabled by default so applications can opt into the additional traffic.

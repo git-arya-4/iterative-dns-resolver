@@ -66,6 +66,7 @@ class DNSCompressionDecoder:
         current = cursor
 
         while True:
+            label_start = current.position
             try:
                 first = current.read_u8()
             except DNSBoundsError as exc:
@@ -94,7 +95,11 @@ class DNSCompressionDecoder:
                 # Compression pointers must reference an earlier
                 # occurrence in the DNS packet. A pointer to its
                 # own position or to a later position is invalid.
-                if pointer >= current.position:
+                # The pointer offset is relative to the beginning of the
+                # packet and must point strictly before the pointer itself.
+                # Comparing with current.position (after reading both bytes)
+                # incorrectly accepts a pointer to its own second byte.
+                if pointer >= label_start:
                     raise DNSCompressionDecodeError(
                         f"forward compression pointer is invalid: "
                         f"{pointer} >= {current.position}"

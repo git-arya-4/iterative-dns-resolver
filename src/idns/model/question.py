@@ -11,6 +11,9 @@ QTYPE_CODES = {
     "MX": 15,
     "TXT": 16,
     "AAAA": 28,
+    "RRSIG": 46,
+    "DS": 43,
+    "DNSKEY": 48,
 }
 
 

@@ -246,3 +246,11 @@ def test_forward_pointer_rejected():
 
     with pytest.raises(DNSCompressionDecodeError):
         DNSCompressionDecoder.decode(cursor)
+
+
+def test_pointer_to_its_own_second_byte_is_rejected():
+    # At offset 0, c0 01 points into the pointer currently being decoded.
+    cursor = ByteCursor(b"\xc0\x01\x00")
+
+    with pytest.raises(DNSCompressionDecodeError):
+        DNSCompressionDecoder.decode(cursor)

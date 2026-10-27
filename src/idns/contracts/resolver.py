@@ -58,6 +58,11 @@ class ResolverResult:
     total_rtt_ms: float = 0.0
     cname_chain: list[str] = field(default_factory=list)
     trace_log: list[str] = field(default_factory=list)
+    # A successful response with no answer records is only negative when the
+    # authority supplied the SOA proof required by RFC 2308.  Keep this
+    # separate from NXDOMAIN so callers do not have to infer NODATA from an
+    # empty answer list (which is also valid for an unresolved referral).
+    is_nodata: bool = False
 
 
 @runtime_checkable

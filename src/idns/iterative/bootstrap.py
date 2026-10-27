@@ -12,6 +12,8 @@ from idns.iterative.delegation import DelegationTracker
 from idns.iterative.glue import GlueExtractor
 from idns.iterative.referral import ReferralParser
 from idns.model import ARecord, AAAARecord, DNSMessage, DNSName, NSRecord
+from idns.contracts.resolver import ResolutionContext
+from idns.errors import DNSTimeoutError, ServerUnreachableError
 
 
 class NameserverBootstrap:
@@ -29,9 +31,15 @@ class NameserverBootstrap:
         self.transport_config = transport_config
         self.resolve_address = resolve_address
         self._resolving: set[DNSName] = set()
+        self.query_context: ResolutionContext | None = None
 
-    def resolve(self, nameserver: DNSName) -> list[str]:
+    def resolve(
+        self,
+        nameserver: DNSName,
+        context: ResolutionContext | None = None,
+    ) -> list[str]:
         """Resolve a nameserver hostname to IPv4 and IPv6 addresses."""
+        context = context or self.query_context
         if self.resolve_address is not None:
             return self.resolve_address(nameserver)
 
@@ -60,6 +68,7 @@ class NameserverBootstrap:
                 resolved = self._resolve_iteratively(
                     nameserver,
                     record_type,
+                    context=context,
                 )
 
                 for address in resolved:
@@ -74,6 +83,7 @@ class NameserverBootstrap:
         self,
         nameserver: DNSName,
         record_type: str,
+        context: ResolutionContext | None = None,
     ) -> list[str]:
         from idns.iterative.root_query import RootQuery
         from idns.iterative.tld_query import TLDQuery
@@ -88,6 +98,11 @@ class NameserverBootstrap:
             nameserver.value,
             record_type=record_type,
         )
+        if context is not None:
+            context.query_count += 1
+            context.trace_log.append(
+                f"bootstrap root query: {nameserver.value} {record_type}"
+            )
 
         addresses = self._extract_addresses(
             root_response.answers,
@@ -116,6 +131,11 @@ class NameserverBootstrap:
             tld_zone,
             record_type=record_type,
         )
+        if context is not None:
+            context.query_count += 1
+            context.trace_log.append(
+                f"bootstrap tld query: {nameserver.value} {record_type}"
+            )
 
         addresses.extend(
             self._extract_addresses(
@@ -164,7 +184,10 @@ class NameserverBootstrap:
 
                 if not server_addresses:
                     try:
-                        server_addresses = self.resolve(referral_nameserver)
+                        server_addresses = self.resolve(
+                            referral_nameserver,
+                            context=context,
+                        )
                     except ValueError:
                         server_addresses = []
 
@@ -176,11 +199,24 @@ class NameserverBootstrap:
                         name=referral_nameserver.value,
                     )
 
-                    authoritative_response, _ = authoritative_query.query(
-                        server,
-                        nameserver.value,
-                        record_type=record_type,
-                    )
+                    try:
+                        authoritative_response, _ = authoritative_query.query(
+                            server,
+                            nameserver.value,
+                            record_type=record_type,
+                        )
+                    except (DNSTimeoutError, ServerUnreachableError):
+                        # A referral can contain several nameservers.  An
+                        # unreachable candidate must not prevent trying the
+                        # next candidate or another referral.
+                        continue
+
+                    if context is not None:
+                        context.query_count += 1
+                        context.trace_log.append(
+                            f"bootstrap authoritative query: "
+                            f"{nameserver.value} ({address})"
+                        )
 
                     addresses.extend(
                         self._extract_addresses(

@@ -23,6 +23,9 @@ class CacheAwareResolver(DNSResolverProtocol):
         self.cache = cache
         self.iterative_resolver = iterative_resolver
         self.cname_processor = CNAMEChainProcessor(self.resolve)
+        set_prefetch_callback = getattr(cache, "set_prefetch_callback", None)
+        if callable(set_prefetch_callback):
+            set_prefetch_callback(self._prefetch)
 
     def resolve(
         self,
@@ -58,6 +61,7 @@ class CacheAwareResolver(DNSResolverProtocol):
                 query_count=context.query_count,
                 cname_chain=list(context.cname_chain),
                 trace_log=list(context.trace_log),
+                is_nodata=entry.is_negative and not entry.is_nxdomain,
             )
             # Process CNAMEs on cached results
             return self.cname_processor.process(domain_name, record_type, result, context)
@@ -67,36 +71,58 @@ class CacheAwareResolver(DNSResolverProtocol):
         result = self.iterative_resolver.resolve(domain_name, record_type, context)
 
         # 3. Cache the Result
-        if result.is_nxdomain or (result.rcode == 0 and not result.answers):
+        self._cache_result(key, result)
+
+        # 4. Process CNAMEs on network result
+        return self.cname_processor.process(domain_name, record_type, result, context)
+
+    def _prefetch(self, key: CacheKey, _entry: CacheEntry) -> None:
+        """Refresh one nearly expired entry without consulting the cache."""
+        result = self.iterative_resolver.resolve(
+            key.domain_name,
+            key.record_type,
+            ResolutionContext(),
+        )
+        self._cache_result(key, result)
+
+    def _cache_result(self, key: CacheKey, result: ResolverResult) -> None:
+        """Apply positive or RFC 2308 negative caching to a result."""
+        is_nodata = getattr(result, "is_nodata", False) or (
+            result.rcode == 0
+            and not result.answers
+            and any(
+                getattr(record, "record_type", "") == "SOA"
+                for record in result.authoritative_servers
+            )
+        )
+        if result.is_nxdomain or is_nodata:
             # Negative Caching (NXDOMAIN or NODATA)
             soa = next((r for r in result.authoritative_servers if getattr(r, 'record_type', '') == 'SOA'), None)
-            ttl = compute_rfc2308_ttl(soa)
-            
-            neg_entry = CacheEntry.create_negative(
-                key=key,
-                is_nxdomain=result.is_nxdomain,
-                ttl_seconds=ttl,
-                soa_record=soa,
-            )
-            
-            # Store NODATA as qtype-specific, but NXDOMAIN as name-level (we store it under A by convention, or the requested type)
-            # The prompt requires: "NXDOMAIN remains name-level... NODATA remains qtype-specific"
-            # Since CacheKey includes record_type, we store NXDOMAIN on the requested type and rely on cross-qtype lookup,
-            # or we store NXDOMAIN on all common types. The contract says NXDOMAIN is name level.
-            # Storing under the requested key is safest, the cross-lookup handles A record lookup.
-            # Actually, to make NXDOMAIN name-level, let's store it under "ANY" or just under the requested key, 
-            # and if another qtype is asked, we check if NXDOMAIN exists for that name. We did that above using type A.
-            # Let's store NXDOMAIN under type A as well to ensure it's found by the cross-qtype logic.
-            self.cache.put(key, neg_entry)
-            if result.is_nxdomain and record_type != "A":
-                self.cache.put(CacheKey.from_query(domain_name, "A"), neg_entry)
+            put_negative = getattr(self.cache, "put_negative", None)
+            if callable(put_negative):
+                # Let the concrete cache apply its configured negative-TTL
+                # policy instead of rebuilding an entry with the default
+                # 300-second limit here.
+                put_negative(
+                    key,
+                    is_nxdomain=result.is_nxdomain,
+                    soa_record=soa,
+                )
+            else:
+                # Retain compatibility with third-party/cache test doubles
+                # implementing only DNSCacheProtocol.
+                ttl = compute_rfc2308_ttl(soa)
+                neg_entry = CacheEntry.create_negative(
+                    key=key,
+                    is_nxdomain=result.is_nxdomain,
+                    ttl_seconds=ttl,
+                    soa_record=soa,
+                )
+                self.cache.put(key, neg_entry)
         
         elif result.rcode == 0 and result.answers:
             # Positive Caching
             self._cache_positive_result(key, result)
-
-        # 4. Process CNAMEs on network result
-        return self.cname_processor.process(domain_name, record_type, result, context)
 
     def _cache_positive_result(self, key: CacheKey, result: ResolverResult) -> None:
         """Cache positive RRsets without combining unrelated owner names.

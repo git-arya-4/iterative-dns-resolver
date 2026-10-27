@@ -162,3 +162,53 @@ class OPTRecord:
     @property
     def dnssec_ok(self) -> bool:
         return bool(self.flags & 0x8000)
+
+
+@dataclass(frozen=True)
+class DNSKEYRecord:
+    """DNSSEC public key record (RFC 4034)."""
+
+    name: DNSName
+    flags: int
+    protocol: int
+    algorithm: int
+    public_key: bytes
+    ttl: int
+
+    record_type: str = "DNSKEY"
+    record_class: str = "IN"
+
+
+@dataclass(frozen=True)
+class RRSIGRecord:
+    """DNSSEC resource-record-set signature (RFC 4034)."""
+
+    name: DNSName
+    type_covered: str
+    algorithm: int
+    labels: int
+    original_ttl: int
+    signature_expiration: int
+    signature_inception: int
+    key_tag: int
+    signer_name: DNSName
+    signature: bytes
+    ttl: int
+
+    record_type: str = "RRSIG"
+    record_class: str = "IN"
+
+
+@dataclass(frozen=True)
+class DSRecord:
+    """Delegation signer digest record (RFC 4034)."""
+
+    name: DNSName
+    key_tag: int
+    algorithm: int
+    digest_type: int
+    digest: bytes
+    ttl: int
+
+    record_type: str = "DS"
+    record_class: str = "IN"

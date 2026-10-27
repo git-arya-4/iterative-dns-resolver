@@ -1,7 +1,7 @@
 """Stable cache API contract for Task 1.6."""
 from dataclasses import dataclass, field
 import time
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class CacheKey:
@@ -20,6 +20,8 @@ class CacheConfig:
     max_entries: int = 10000
     negative_ttl_seconds: int = 300
     rfc2308_enabled: bool = True
+    prefetch_enabled: bool = False
+    prefetch_threshold_seconds: int = 30
 
 @dataclass
 class CacheEntry:
@@ -45,14 +47,14 @@ class CacheEntry:
 
 def compute_rfc2308_ttl(soa_record: Optional[Any], max_negative_ttl: int = 300) -> int:
     """Compute negative TTL as min(SOA TTL, SOA MINIMUM), capped by policy."""
-    limit = max(0, max_negative_ttl)
+    limit = max(0, int(max_negative_ttl))
     if soa_record is None:
         return limit
     values = [limit]
     for attribute in ("ttl", "minimum"):
         value = getattr(soa_record, attribute, None)
         if isinstance(value, (int, float)):
-            values.append(int(value))
+            values.append(max(0, int(value)))
     return max(0, min(values))
 
 @dataclass

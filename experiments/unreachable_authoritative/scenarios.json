@@ -1,0 +1,178 @@
+{
+  "scenarios": [
+    {
+      "domain": "example.com",
+      "record_type": "A",
+      "unreachable_endpoint": "127.0.0.1:56153",
+      "unreachable_ip": "192.0.2.1",
+      "candidate_endpoints_attempted": [
+        "127.0.0.1:56153",
+        "127.0.0.1:56154"
+      ],
+      "candidate_names_attempted": [
+        "authority-a.example.com",
+        "authority-b.example.com"
+      ],
+      "candidate_attempts": [
+        {
+          "name": "authority-a.example.com",
+          "endpoint": "127.0.0.1:56153",
+          "started_ns": 140023054061000,
+          "succeeded": false,
+          "error_type": "DNSTimeoutError",
+          "error": "DNS query to server '127.0.0.1:56153' timed out after 0.02 seconds.",
+          "udp_attempts": 2,
+          "retries": 1,
+          "timeouts": 0,
+          "finished_ns": 140023054814200,
+          "elapsed_ns": 753200
+        },
+        {
+          "name": "authority-b.example.com",
+          "endpoint": "127.0.0.1:56154",
+          "started_ns": 140023054913200,
+          "succeeded": true,
+          "error_type": null,
+          "error": null,
+          "udp_attempts": 1,
+          "retries": 0,
+          "timeouts": 0,
+          "finished_ns": 140023055505900,
+          "elapsed_ns": 592700
+        }
+      ],
+      "udp_attempts": {
+        "authority-a.example.com": 2,
+        "authority-b.example.com": 1
+      },
+      "retries_per_candidate": {
+        "authority-a.example.com": 1,
+        "authority-b.example.com": 0
+      },
+      "failover_occurred": true,
+      "candidate_exhausted": false,
+      "completed": true,
+      "final_success": true,
+      "final_failure": false,
+      "final_status": "success",
+      "expected_failure": false,
+      "error_type": null,
+      "error_message": null,
+      "error": null,
+      "elapsed_ns": 39891300,
+      "elapsed_ms": 39.8913,
+      "query_count": 3,
+      "query_attempt_count": 5,
+      "control_query_attempt_count": 2,
+      "query_attempt_count_semantics": "controlled root/TLD exchanges plus every authoritative UDP send, including retries",
+      "queried_servers": [
+        "192.0.2.1",
+        "192.0.2.4"
+      ],
+      "trace_log": [
+        "cache miss: example.com A",
+        "root query: example.com A",
+        "tld query: example.com A",
+        "authoritative query: authority-a.example.com (192.0.2.1)",
+        "timeout/failover: 192.0.2.1",
+        "authoritative query: authority-b.example.com (192.0.2.4)"
+      ],
+      "rcode": 0,
+      "is_cache_hit": false,
+      "answer_count": 1,
+      "final_answers": [
+        {
+          "name": "example.com",
+          "record_type": "A",
+          "ttl": 60,
+          "address": "203.0.113.42"
+        }
+      ],
+      "authority_b_responses": 1
+    },
+    {
+      "domain": "example.com",
+      "record_type": "A",
+      "unreachable_endpoint": "127.0.0.1:56158",
+      "unreachable_ip": "192.0.2.1",
+      "candidate_endpoints_attempted": [
+        "127.0.0.1:56158",
+        "127.0.0.1:56159"
+      ],
+      "candidate_names_attempted": [
+        "authority-a.example.com",
+        "authority-b.example.com"
+      ],
+      "candidate_attempts": [
+        {
+          "name": "authority-a.example.com",
+          "endpoint": "127.0.0.1:56158",
+          "started_ns": 140023091546500,
+          "succeeded": false,
+          "error_type": "DNSTimeoutError",
+          "error": "DNS query to server '127.0.0.1:56158' timed out after 0.02 seconds.",
+          "udp_attempts": 2,
+          "retries": 1,
+          "timeouts": 0,
+          "finished_ns": 140023092250100,
+          "elapsed_ns": 703600
+        },
+        {
+          "name": "authority-b.example.com",
+          "endpoint": "127.0.0.1:56159",
+          "started_ns": 140023092319100,
+          "succeeded": false,
+          "error_type": "DNSTimeoutError",
+          "error": "DNS query to server '127.0.0.1:56159' timed out after 0.02 seconds.",
+          "udp_attempts": 2,
+          "retries": 1,
+          "timeouts": 0,
+          "finished_ns": 140023092859300,
+          "elapsed_ns": 540200
+        }
+      ],
+      "udp_attempts": {
+        "authority-a.example.com": 2,
+        "authority-b.example.com": 2
+      },
+      "retries_per_candidate": {
+        "authority-a.example.com": 1,
+        "authority-b.example.com": 1
+      },
+      "failover_occurred": true,
+      "candidate_exhausted": true,
+      "completed": false,
+      "final_success": false,
+      "final_failure": true,
+      "final_status": "failure",
+      "expected_failure": true,
+      "error_type": "DNSTimeoutError",
+      "error_message": "DNS query to server '127.0.0.1:56159' timed out after 0.02 seconds.",
+      "error": "DNS query to server '127.0.0.1:56159' timed out after 0.02 seconds.",
+      "elapsed_ns": 2731300,
+      "elapsed_ms": 2.7313,
+      "query_count": 2,
+      "query_attempt_count": 6,
+      "control_query_attempt_count": 2,
+      "query_attempt_count_semantics": "controlled root/TLD exchanges plus every authoritative UDP send, including retries",
+      "queried_servers": [
+        "192.0.2.1",
+        "192.0.2.4"
+      ],
+      "trace_log": [
+        "cache miss: example.com A",
+        "root query: example.com A",
+        "tld query: example.com A",
+        "authoritative query: authority-a.example.com (192.0.2.1)",
+        "timeout/failover: 192.0.2.1",
+        "authoritative query: authority-b.example.com (192.0.2.4)",
+        "timeout/failover: 192.0.2.4"
+      ],
+      "rcode": null,
+      "is_cache_hit": false,
+      "answer_count": 0,
+      "final_answers": [],
+      "authority_b_responses": 0
+    }
+  ]
+}
